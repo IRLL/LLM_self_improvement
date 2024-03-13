@@ -17,12 +17,50 @@ from peft import LoraConfig,get_peft_model
 import deepspeed
 from datasets import load_dataset
 from accelerate import PartialState
+import argparse
+from datetime import datetime
+from deepspeed.runtime.config import DeepSpeedConfig
 
 
 
+# Format the date and time as a string
+date_time_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
-deepspeed_config_path = "/home/qianxi/scratch/laffi/code/deepspeed_config.json"
-# deepspeed_config_path = "/home/qianxi/scratch/laffi/code/ds_config.json"
+def parse_arguments():
+    parser = argparse.ArgumentParser(description="Fine-tuning a Language Model")
+    parser.add_argument("--enable_ds", type=int, default=0, help="Whether to use deepspeed for finetuning.")
+    parser.add_argument("--ds_config_path", type=str, default="/home/qianxi/scratch/laffi/code/ds_config.json", help="ds config path")
+    parser.add_argument("--parent_root", type=str, default="/home/qianxi/scratch/laffi", help="Root directory for the project")
+    parser.add_argument("--model_name", type=str, default="7b", help="Model name or path")
+    # parser.add_argument("--dataset_name", type=str, default="mlabonne/guanaco-llam   a2-1k", help="Dataset name or path")
+    # parser.add_argument("--epochs", type=int, default=1, help="Number of training epochs")
+    # parser.add_argument("--batch_size", type=int, default=1, help="Batch size per device")
+    # parser.add_argument("--learning_rate", type=float, default=2e-4, help="Learning rate")
+    # parser.add_argument("--weight_decay", type=float, default=0.001, help="Weight decay")
+    # parser.add_argument("--max_grad_norm", type=float, default=0.3, help="Max grad norm")
+    # parser.add_argument("--lora_r", type=int, default=16, help="Rank for LoRA")
+    # parser.add_argument("--lora_alpha", type=int, default=8, help="Scale factor for LoRA")
+    # parser.add_argument("--lora_dropout", type=float, default=0.05, help="Dropout rate for LoRA")
+    # parser.add_argument("--use_fp16", action='store_true', help="Use mixed precision training")
+    # Add other arguments as needed
+    return parser.parse_args()
+
+args = parse_arguments()
+
+parent_root = "/home/qianxi/scratch/laffi"
+
+model_path = os.path.join(parent_root,f"models/{args.model_name}")
+result_path = os.path.join(parent_root,f"results/{args.model_name}-{date_time_str}")
+
+if args.enable_ds:
+    deepspeed_config_path = args.ds_config_path
+    ds_config=DeepSpeedConfig(json_file=deepspeed_config_path)
+    device_map={'':PartialState().process_index}
+
+else: 
+    deepspeed_config_path = None
+    ds_config = None
+    device_map="auto"
 # Assuming your JSON data is in 'data.json', and located in the same directory as this script
 class CustomDataset(Dataset):
     def __init__(self, tokenizer, filename="data.json", max_length=256):
@@ -53,8 +91,7 @@ class CustomDataset(Dataset):
         }
 
 # Initialize tokenizer
-model_name = "/home/qianxi/scratch/laffi/models/7b"  # Replace with your LLaMA 2 model name
-tokenizer = AutoTokenizer.from_pretrained(model_name)
+tokenizer = AutoTokenizer.from_pretrained(model_path)
 tokenizer.pad_token = tokenizer.eos_token
 tokenizer.padding_side = "right"
 # Create dataset and dataloader
@@ -87,11 +124,11 @@ quant_config = BitsAndBytesConfig(
     bnb_4bit_use_double_quant=False,
 )
 # Assuming we're proceeding normally without these adjustments for demonstration:
-model = AutoModelForCausalLM.from_pretrained(model_name,
+model = AutoModelForCausalLM.from_pretrained(model_path,
                                              quantization_config=quant_config,
                                              low_cpu_mem_usage=True,
                                              use_cache=False,
-                                             device_map={'':PartialState().process_index})
+                                             device_map=device_map)
 
 
 model.config.use_cache = False
@@ -99,14 +136,14 @@ model.config.pretraining_tp = 1
 model = get_peft_model(model, lora_config)
 model.print_trainable_parameters()
 
-# ds_config = DeepSpeedConfig(deepspeed_config_path)
+# 
 
 
 # Training settings
 training_params = TrainingArguments(
-    output_dir="./results",
+    output_dir=result_path,
     num_train_epochs=1,
-    per_device_train_batch_size=2,
+    per_device_train_batch_size=1,
     gradient_accumulation_steps=1,
     save_steps=25,
     logging_steps=25,

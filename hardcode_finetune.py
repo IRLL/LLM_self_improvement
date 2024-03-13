@@ -14,10 +14,34 @@ from transformers import (
 from trl import SFTTrainer
 from peft import LoraConfig,get_peft_model
 # from datasets import load_metric
-
+import deepspeed
 from datasets import load_dataset
-# from accelerate import PartialState
+from accelerate import PartialState
+import argparse
+from datetime import datetime
 
+from deepspeed.runtime.config import DeepSpeedConfig
+
+enable_ds = True
+# Format the date and time as a string
+date_time_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+model_name = "13b"
+
+
+parent_root = "/home/qianxi/scratch/laffi"
+
+model_path = os.path.join(parent_root,f"models/{model_name}")
+result_path = os.path.join(parent_root,f"results/{model_name}-{date_time_str}")
+
+if enable_ds:
+    deepspeed_config_path = "/home/qianxi/scratch/laffi/code/ds_config.json"
+    ds_config=DeepSpeedConfig(json_file=deepspeed_config_path)
+    device_map={'':PartialState().process_index}
+
+else: 
+    deepspeed_config_path = None
+    ds_config = None
+    device_map="auto"
 
 
 # Assuming your JSON data is in 'data.json', and located in the same directory as this script
@@ -50,9 +74,7 @@ class CustomDataset(Dataset):
         }
 
 # Initialize tokenizer
-model_name = "/home/qianxi/scratch/laffi/models/7b"  # Replace with your LLaMA 2 model name
-
-tokenizer = AutoTokenizer.from_pretrained(model_name,device_map="auto")
+tokenizer = AutoTokenizer.from_pretrained(model_path)
 tokenizer.pad_token = tokenizer.eos_token
 tokenizer.padding_side = "right"
 # Create dataset and dataloader
@@ -62,8 +84,7 @@ dataset = load_dataset("mlabonne/guanaco-llama2-1k", split="train")
 #     return tokenizer(example["text"])
 
 # dataset = dataset.map(tokenization, batched=True)
-print("after load dataset")
-print(os.system("nvidia-smi"))
+
 #dataloader = DataLoader(dataset, batch_size=4)  # Adjust batch size as needed
 target_modules = ['q_proj','k_proj','v_proj','o_proj','gate_proj','down_proj','up_proj']#,'lm_head']
 lora_config = LoraConfig(r=16,
@@ -85,26 +106,25 @@ quant_config = BitsAndBytesConfig(
     bnb_4bit_compute_dtype=compute_dtype,
     bnb_4bit_use_double_quant=False,
 )
-print("before load model")
-print(os.system("nvidia-smi"))
 # Assuming we're proceeding normally without these adjustments for demonstration:
-model = AutoModelForCausalLM.from_pretrained(model_name,
+model = AutoModelForCausalLM.from_pretrained(model_path,
                                              quantization_config=quant_config,
                                              low_cpu_mem_usage=True,
-                                             device_map="auto")
-print(model)
-print("before lora")
-print(os.system("nvidia-smi"))
+                                             use_cache=False,
+                                             device_map=device_map)
+
+
+model.config.use_cache = False
 model.config.pretraining_tp = 1
 model = get_peft_model(model, lora_config)
 model.print_trainable_parameters()
 
-# ds_config = DeepSpeedConfig(deepspeed_config_path)
+# 
 
 
 # Training settings
 training_params = TrainingArguments(
-    output_dir="./results",
+    output_dir=result_path,
     num_train_epochs=1,
     per_device_train_batch_size=1,
     gradient_accumulation_steps=1,
@@ -119,10 +139,9 @@ training_params = TrainingArguments(
     warmup_ratio=0.03,
     group_by_length=True,
     lr_scheduler_type="constant",
-    report_to="none"
-
+    report_to="none",
+    deepspeed=ds_config
 )
-print("before sft trainer")
 print(os.system("nvidia-smi"))
 # Initialize the Trainer
 trainer = SFTTrainer(
@@ -135,7 +154,6 @@ trainer = SFTTrainer(
     args=training_params,
     packing=False,
 )
-print("before trainer")
-print(os.system("nvidia-smi"))
+
 # Start training
 trainer.train()

@@ -1,0 +1,11 @@
+python construct_answer_prompts.py --dataset_root="/home/qianxi/scratch/laffi/datasets/natural_instruction_v1/train" \
+       --output_file_path="results/answer.json"  \
+       --iteration_version=0 \
+       --current_examples_path="results/cur_example.json"
+
+
+
+python construct_feedback_prompts.py --answer_dataset_root="/home/qianxi/scratch/laffi/code/results/answer.json" \
+       --output_file_path="results/feedback.json"  \
+       --iteration_version=0 \
+       --current_examples_path="results/cur_example.json"

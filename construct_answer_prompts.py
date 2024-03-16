@@ -20,7 +20,7 @@ args = parse_arguments()
 example_source = "human"
 
 # Need to carefully design this:
-per_task_data_row_amount = 2
+per_task_data_row_amount = 200
 
 def compose_examples(example_source,
                      human_examples,
@@ -61,7 +61,10 @@ for idx, each_json in enumerate(os.listdir(args.base_dataset_path)):
 
         task_definition = file["Definition"]
         caution = file["Emphasis & Caution"]
-        instances = file["Instances"][:per_task_data_row_amount]
+        full_length = per_task_data_row_amount
+        if full_length > len(file["Instances"]):
+            full_length = len(file["Instances"])
+        instances = file["Instances"][:full_length]
 
         per_task_dict["Instances"] = instances
         human_examples = file["Examples"]

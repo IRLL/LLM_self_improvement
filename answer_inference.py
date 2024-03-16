@@ -65,7 +65,7 @@ for each in tqdm.tqdm(texts):
 for i, text in enumerate(texts):
     task, index = index_dict[i]
     # Write answer prediction to json file.
-    answer_data[task]["Instances"][index]['answer_prediction'] = text
+    answer_data[task]["Instances"][index]['answer_prediction'] = result[i]
     #print(f"Input: {text}\nOutput: {result[i]['generated_text']}\n")
 
 with open(args.answer_dataset_path,"w") as obj:

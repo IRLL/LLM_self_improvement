@@ -34,8 +34,12 @@ if os.path.exists(args.current_examples_path):
 with open(args.answer_dataset_path) as obj:
     answer_pred_dataset = json.loads(obj.read())
 
+all_task_feedback_input_data = []
+all_task_feedback_gen_prompt_data = []
+
 for task_name, task_dict in answer_pred_dataset.items():
     per_task_prompt_list = []
+    per_task_no_example_input_list = []
     per_task_dict = copy.deepcopy(task_dict)
 
     task_definition = per_task_dict["Definition"]
@@ -45,8 +49,11 @@ for task_name, task_dict in answer_pred_dataset.items():
     # Compose examples prompt.
     example_prompt = compose_examples(loaded_examples[task_name])
 
-    feedback_prompt = """Please refer to the context, input, compare the standard answer and the predicted answer, provide your feedback and explanation for whether you think the predict answer is proper. You need to follow the examples we provided."""
+    feedback_prompt = """Please refer to the context, input, compare the standard answer and the predicted answer, provide your feedback for whether you think the predict answer is proper and the reasons. You need to follow the examples we provided."""
     context = f"""{feedback_prompt}\n\nTask:{task_definition} {caution} \n\n"""
+
+    feedback_input_no_examples = """Please refer to the context, input, compare the standard answer and the predicted answer, provide your feedback for whether you think the predict answer is proper and the reasons."""
+    no_example_context = f"""{feedback_input_no_examples}\n\nTask:{task_definition} {caution} \n\n"""
 
     # Compose full_prompt for each instance.
     for instance in instances:
@@ -55,12 +62,20 @@ for task_name, task_dict in answer_pred_dataset.items():
             standard_answer = instance['output'][0]
 
         full_prompt = f"""{context}\n\n{example_prompt}\n\n###\n\nInput: {instance['input']} \nStandard Answer: {standard_answer} \nPredicted Answer: {instance['answer_prediction']} \n Feedback: """
+        no_example_full_prompt = f"""{no_example_context}\n\nInput: {instance['input']} \nStandard Answer: {standard_answer} \nPredicted Answer: {instance['answer_prediction']} \n Feedback: """
+
         per_task_prompt_list.append(full_prompt)
+        per_task_no_example_input_list.append(no_example_full_prompt)
 
     per_task_dict["Feedback Prediction Prompt Dataset"] = per_task_prompt_list
+    per_task_dict["Feedback Input Dataset"] = per_task_no_example_input_list
 
     dataset_dict[task_name] = per_task_dict
-    
+    all_task_feedback_input_data += per_task_no_example_input_list
+    all_task_feedback_gen_prompt_data += per_task_prompt_list
+
+dataset_dict["all_feedback_input_list"] = all_task_feedback_input_data
+dataset_dict["all_task_feedback_gen_prompt_data"] = all_task_feedback_gen_prompt_data
 # Write feedback prompts and data to file.
 with open(args.feedback_prompt_set_path,'w') as obj:
     obj.write(json.dumps(dataset_dict))

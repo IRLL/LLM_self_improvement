@@ -1,7 +1,7 @@
 import os
 import json
 import torch
-from torch.utils.data import Dataset, DataLoader
+import numpy as np
 from transformers import (
     AutoTokenizer,
     AutoModelForCausalLM,
@@ -20,6 +20,11 @@ from accelerate import PartialState
 import argparse
 from datetime import datetime
 from deepspeed.runtime.config import DeepSpeedConfig
+from torchmetrics.text.rouge import ROUGEScore
+
+from dataset_helpers import FinetuneDataset, NIevalDataset
+
+
 
 
 
@@ -32,7 +37,7 @@ def parse_arguments():
     parser.add_argument("--ds_config_path", type=str, default="/home/qianxi/scratch/laffi/code/ds_config.json", help="ds config path")
     parser.add_argument("--parent_root", type=str, default="/home/qianxi/scratch/laffi", help="Root directory for the project")
     parser.add_argument("--model_name", type=str, default="7b", help="Model name or path")
-    # parser.add_argument("--dataset_name", type=str, default="mlabonne/guanaco-llam   a2-1k", help="Dataset name or path")
+    parser.add_argument("--dataset_path", type=str, default="mlabonne/guanaco-llam   a2-1k", help="Dataset path")
     # parser.add_argument("--epochs", type=int, default=1, help="Number of training epochs")
     # parser.add_argument("--batch_size", type=int, default=1, help="Batch size per device")
     # parser.add_argument("--learning_rate", type=float, default=2e-4, help="Learning rate")
@@ -46,8 +51,8 @@ def parse_arguments():
     return parser.parse_args()
 
 args = parse_arguments()
-
-parent_root = "/home/qianxi/scratch/laffi"
+rouge = ROUGEScore()
+parent_root = args.parent_root
 
 model_path = os.path.join(parent_root,f"models/{args.model_name}")
 result_path = os.path.join(parent_root,f"results/{args.model_name}-{date_time_str}")
@@ -62,47 +67,32 @@ else:
     ds_config = None
     device_map="auto"
 # Assuming your JSON data is in 'data.json', and located in the same directory as this script
-class CustomDataset(Dataset):
-    def __init__(self, tokenizer, filename="data.json", max_length=256):
-        self.tokenizer = tokenizer
-        self.inputs = []
-        self.targets = []
-        self.max_length = max_length
-        with open(filename, 'r') as file:
-            data = json.load(file)
-            for key,value in data.items():
-                self.inputs.append(key)
-                self.targets.append(value)
-
-
-                
-
-    def __len__(self):
-        return len(self.inputs)
-
-    def __getitem__(self, idx):
-        input_encodings = self.tokenizer(self.inputs[idx], truncation=True, padding='max_length', max_length=self.max_length)
-        target_encodings = self.tokenizer(self.targets[idx], truncation=True, padding='max_length', max_length=self.max_length)
-
-        return {
-            'input_ids': torch.tensor(input_encodings['input_ids']),
-            'attention_mask': torch.tensor(input_encodings['attention_mask']),
-            'labels': torch.tensor(target_encodings['input_ids'])
-        }
 
 # Initialize tokenizer
 tokenizer = AutoTokenizer.from_pretrained(model_path)
 tokenizer.pad_token = tokenizer.eos_token
 tokenizer.padding_side = "right"
 # Create dataset and dataloader
-# dataset = CustomDataset(tokenizer, filename="/home/qianxi/scratch/laffi/datasets/test.json")
-dataset = load_dataset("mlabonne/guanaco-llama2-1k", split="train")
-# def tokenization(example):
-#     return tokenizer(example["text"])
+finetune_dataset = FinetuneDataset(tokenizer, filename=args.dataset_path)
+nl_eval_dataset = NIevalDataset(tokenizer)
 
-# dataset = dataset.map(tokenization, batched=True)
+def compute_metrics(eval_pred):
+    predictions, labels = eval_pred
+    np_array = torch.as_tensor(predictions)
+    predictions = torch.argmax(np_array, dim=-1)
+    labels = np.where(labels !=-100, labels, tokenizer.pad_token_id)
+    # print(predictions.shape)
+    # print(labels.shape)
+    # print(labels[0])
+    # # print(predictions[0])
+    # assert 1==2
+    # print(predictions.shape, labels.shape)
+    decoded_preds = tokenizer.batch_decode(predictions, skip_special_tokens=True)
+    # Assuming labels are not already strings:
+    decoded_labels = tokenizer.batch_decode(labels, skip_special_tokens=True)
+    rouge_score = rouge(decoded_preds, decoded_labels)
+    return {"rouge_score": rouge_score}
 
-#dataloader = DataLoader(dataset, batch_size=4)  # Adjust batch size as needed
 target_modules = ['q_proj','k_proj','v_proj','o_proj','gate_proj','down_proj','up_proj']#,'lm_head']
 lora_config = LoraConfig(r=16,
             target_modules = target_modules,
@@ -143,7 +133,7 @@ model.print_trainable_parameters()
 training_params = TrainingArguments(
     output_dir=result_path,
     num_train_epochs=1,
-    per_device_train_batch_size=1,
+    per_device_train_batch_size=8,
     gradient_accumulation_steps=1,
     save_steps=25,
     logging_steps=25,
@@ -157,20 +147,27 @@ training_params = TrainingArguments(
     group_by_length=True,
     lr_scheduler_type="constant",
     report_to="none",
-    deepspeed=deepspeed_config_path
+    evaluation_strategy="epoch",#epoch
+    deepspeed=deepspeed_config_path,
+    eval_accumulation_steps=2
 )
-print(os.system("nvidia-smi"))
+# print(os.system("nvidia-smi"))
 # Initialize the Trainer
 trainer = SFTTrainer(
     model=model,
-    train_dataset=dataset,
+    train_dataset=finetune_dataset,
+    eval_dataset=nl_eval_dataset,
     peft_config=lora_config,
     dataset_text_field="text",
     max_seq_length=None,
     tokenizer=tokenizer,
     args=training_params,
     packing=False,
+    compute_metrics=compute_metrics
+    
 )
 
 # Start training
 trainer.train()
+# metrics=trainer.evaluate()
+# print(metrics)

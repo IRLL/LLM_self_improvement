@@ -41,14 +41,7 @@ pipeline = transformers.pipeline(
 with open(args.feedback_prompt_set_path) as obj:
     feedback_data = json.loads(obj.read())
 
-texts = []
-index_dict = []
-for key, value in feedback_data.items():
-    texts += value['Feedback Prediction Prompt Dataset']
-    for each_instance_idx in range(len(value['Instances'])):
-        index_dict.append((key, each_instance_idx))
-
-    assert len(value['Feedback Prediction Prompt Dataset']) == len(value['Instances'])
+texts = feedback_data["all_task_feedback_gen_prompt_data"]
 
 result = []
 idx = 0
@@ -60,10 +53,11 @@ for each in tqdm.tqdm(texts):
     result.append(res)
     #print(result)
 
+feedback_data["Feedback Label"]=[]
+
 for i, text in enumerate(texts):
-    task, index = index_dict[i]
     # Write answer prediction to json file.
-    feedback_data[task]["Instances"][index]['answer_prediction'] = text
+    feedback_data["Feedback Label"].append(result[i])
     #print(f"Input: {text}\nOutput: {result[i]['generated_text']}\n")
 
 with open(args.feedback_dataset_path,"w") as obj:

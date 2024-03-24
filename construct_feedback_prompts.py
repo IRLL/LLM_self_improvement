@@ -18,9 +18,9 @@ for each task:
 args = parse_arguments()
 
 def compose_examples(examples):
-    prompt = "Examples: \n"
+    prompt = "### Examples:\n"
     for each_example in examples:
-        single_prompt = f"""Input: {each_example["input"]} \nPredicted Answer: {each_example["output"]} \nFeedback: {each_example["reason"]} \n\n"""
+        single_prompt = f"""##Task:\n{each_example["input"]}\n##Predicted Answer: {each_example["output"]}\n##Feedback:\n{each_example["reason"]}\n\n"""
         prompt += single_prompt
 
     return prompt
@@ -49,11 +49,11 @@ for task_name, task_dict in answer_pred_dataset.items():
     # Compose examples prompt.
     example_prompt = compose_examples(loaded_examples[task_name])
 
-    feedback_prompt = """Please refer to the context, input, compare the standard answer and the predicted answer, provide your feedback for whether you think the predict answer is proper and the reasons. You need to follow the examples we provided."""
-    context = f"""{feedback_prompt}\n\nTask:{task_definition} {caution} \n\n"""
+    feedback_prompt = """Please refer to the instruction and task, compare the standard answer and the predicted answer, provide your feedback for whether you think the predict answer is proper and the reasons. You need to follow the examples we provided."""
+    context = f"""### Instruction:\n{feedback_prompt}\n##Task:\n{task_definition} {caution} \n\n"""
 
-    feedback_input_no_examples = """Please refer to the context, input, compare the standard answer and the predicted answer, provide your feedback for whether you think the predict answer is proper and the reasons."""
-    no_example_context = f"""{feedback_input_no_examples}\n\nTask:{task_definition} {caution} \n\n"""
+    feedback_input_no_examples = """Please refer to the instruction and task, compare the standard answer and the predicted answer, provide your feedback for whether you think the predict answer is proper and the reasons."""
+    no_example_context = f"""### Instruction:\n{feedback_input_no_examples}\n##Task:\n{task_definition} {caution} \n\n"""
 
     # Compose full_prompt for each instance.
     for instance in instances:
@@ -61,8 +61,8 @@ for task_name, task_dict in answer_pred_dataset.items():
         if isinstance(standard_answer, list):
             standard_answer = instance['output'][0]
 
-        full_prompt = f"""{context}\n\n{example_prompt}\n\n###\n\nInput: {instance['input']} \nStandard Answer: {standard_answer} \nPredicted Answer: {instance['answer_prediction']} \n Feedback: """
-        no_example_full_prompt = f"""{no_example_context}\n\nInput: {instance['input']} \nStandard Answer: {standard_answer} \nPredicted Answer: {instance['answer_prediction']} \n Feedback: """
+        full_prompt = f"""{context}{example_prompt}### Task:\n{instance['input']}### Standard Answer:\n{standard_answer}\n### Predicted Answer:\n{instance['answer_prediction']}\n### Feedback:\n"""
+        no_example_full_prompt = f"""{no_example_context}### Task:\n{instance['input']}### Standard Answer:\n{standard_answer}\n### Predicted Answer:\n{instance['answer_prediction']}\n### Feedback:\n"""
 
         per_task_prompt_list.append(full_prompt)
         per_task_no_example_input_list.append(no_example_full_prompt)

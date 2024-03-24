@@ -7,6 +7,8 @@ from transformers.pipelines.pt_utils import KeyDataset
 from torch.utils.data import Dataset
 
 from utils import parse_arguments
+from peft import PeftModel
+
 
 # Load arguments.
 args = parse_arguments()
@@ -29,7 +31,11 @@ model = AutoModelForCausalLM.from_pretrained(args.model_path,
                                              low_cpu_mem_usage=True,
                                              use_cache=False,
                                              device_map="auto")
+if args.adapter_path:
+    model = PeftModel.from_pretrained(model,model_id=args.adapter_path)
+    model = model.merge_and_unload()
 
+model.eval()
 pipeline = transformers.pipeline(
     "text-generation",
     model=model,
@@ -37,6 +43,8 @@ pipeline = transformers.pipeline(
     torch_dtype=torch.float16,
     device_map="auto",
     max_new_tokens=200, 
+    num_beams=5,
+    num_return_sequences=1
 
 )
 with open(args.answer_prompt_set_path) as obj:

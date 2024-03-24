@@ -40,10 +40,10 @@ for each_file in os.listdir(base_root):
         with open(full_path) as obj:
             content = json.loads(obj.read())
 
-        instruction = f"""###Instruction:\n{content["Definition"]} {content["Emphasis & Caution"]}\n\n"""
-        question = f"""###Answer:\n"""
+        instruction = f"""### Instruction:\n{content["Definition"]} {content["Emphasis & Caution"]}\n\n"""
+        question = f"""### Answer:\n"""
         for i in range(limit):
-            task = f"""###Task:\n{content["Instances"][i]["input"]}\n\n"""
+            task = f"""### Task:\n{content["Instances"][i]["input"]}\n\n"""
             full_prompt = f"""{instruction}{task}{question}"""
 
             input_list.append(full_prompt)

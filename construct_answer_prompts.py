@@ -26,14 +26,14 @@ def compose_examples(example_source,
                      human_examples,
                      pos_example_amount,
                      negative_example_amount):
-    prompt = "Examples: \n"
+    prompt = "### Examples:\n"
     if example_source == "human":
         examples = []
         if pos_example_amount:
             pos_example = human_examples["Positive Examples"][:pos_example_amount]
             examples += pos_example
             for each_example in pos_example:
-                single_prompt = f"""Input: {each_example["input"]} \nOutput:{each_example["output"]}\n\n"""
+                single_prompt = f"""##Task:\n{each_example["input"]}\n##Answer:\n{each_example["output"]}\n\n"""
                 prompt += single_prompt
             
         if negative_example_amount:
@@ -42,7 +42,7 @@ def compose_examples(example_source,
 
             if '-' not in neg_example:
                 for each_example in neg_example:
-                    single_prompt = f"""Input: {each_example["input"]} \nOutput:{each_example["output"]}\n\n"""
+                    single_prompt = f"""##Task:\n{each_example["input"]}\n##Answer:\n{each_example["output"]}\n\n"""
                     prompt += single_prompt
 
     return prompt, examples
@@ -76,11 +76,11 @@ for idx, each_json in enumerate(os.listdir(args.base_dataset_path)):
                                           args.neg_example_amount)
 
         # Compose context.
-        context = f"""{task_definition} {caution}"""
+        context = f"""### Instruction:\n{task_definition} {caution}\n\n"""
 
         # Compose full_prompt for each instance.
         for idx,instance in enumerate(instances):
-            full_prompt = f"""{context}\n\n{example_prompt}\n\n###\n\nInput: {instance['input']} \nOutput:"""
+            full_prompt = f"""{context}{example_prompt}\n\n### Task:\n{instance['input']}\n### Answer:\n"""
             per_task_prompt_list.append(full_prompt)
 
             # To be removed later

@@ -23,7 +23,7 @@ from deepspeed.runtime.config import DeepSpeedConfig
 from torchmetrics.text.rouge import ROUGEScore
 
 from dataset_helpers import FinetuneDataset, NIevalDataset
-
+from peft import PeftModel
 
 
 
@@ -38,6 +38,8 @@ def parse_arguments():
     parser.add_argument("--parent_root", type=str, default="/home/qianxi/scratch/laffi", help="Root directory for the project")
     parser.add_argument("--model_name", type=str, default="7b", help="Model name or path")
     parser.add_argument("--dataset_path", type=str, default="mlabonne/guanaco-llam   a2-1k", help="Dataset path")
+    parser.add_argument("--model_save_path", type=str, default="/result", help="Result path")
+    parser.add_argument("--adapter_path", type=str, default=None, help="Adapter path")
     # parser.add_argument("--epochs", type=int, default=1, help="Number of training epochs")
     # parser.add_argument("--batch_size", type=int, default=1, help="Batch size per device")
     # parser.add_argument("--learning_rate", type=float, default=2e-4, help="Learning rate")
@@ -55,7 +57,7 @@ rouge = ROUGEScore()
 parent_root = args.parent_root
 
 model_path = os.path.join(parent_root,f"models/{args.model_name}")
-result_path = os.path.join(parent_root,f"results/{args.model_name}-{date_time_str}")
+result_path = args.model_save_path
 
 if args.enable_ds:
     deepspeed_config_path = args.ds_config_path
@@ -87,6 +89,9 @@ def compute_metrics(eval_pred):
     # # print(predictions[0])
     # assert 1==2
     # print(predictions.shape, labels.shape)
+    torch.save(predictions, 'predictions.pt')
+    torch.save(labels, 'labels.pt')
+    assert 1==2
     decoded_preds = tokenizer.batch_decode(predictions, skip_special_tokens=True)
     # Assuming labels are not already strings:
     decoded_labels = tokenizer.batch_decode(labels, skip_special_tokens=True)
@@ -119,7 +124,9 @@ model = AutoModelForCausalLM.from_pretrained(model_path,
                                              low_cpu_mem_usage=True,
                                              use_cache=False,
                                              device_map=device_map)
-
+if args.adapter_path:
+    model = PeftModel.from_pretrained(model,model_id=args.adapter_path)
+    model = model.merge_and_unload()
 
 model.config.use_cache = False
 model.config.pretraining_tp = 1
@@ -136,6 +143,7 @@ training_params = TrainingArguments(
     per_device_train_batch_size=8,
     gradient_accumulation_steps=1,
     save_steps=25,
+    eval_steps=3,
     logging_steps=25,
     learning_rate=2e-4,
     weight_decay=0.001,
@@ -147,9 +155,9 @@ training_params = TrainingArguments(
     group_by_length=True,
     lr_scheduler_type="constant",
     report_to="none",
-    evaluation_strategy="epoch",#epoch
+    evaluation_strategy="steps",#epoch
     deepspeed=deepspeed_config_path,
-    eval_accumulation_steps=2
+    eval_accumulation_steps=4
 )
 # print(os.system("nvidia-smi"))
 # Initialize the Trainer
@@ -169,5 +177,6 @@ trainer = SFTTrainer(
 
 # Start training
 trainer.train()
+model.save_pretrained(result_path)
 # metrics=trainer.evaluate()
 # print(metrics)

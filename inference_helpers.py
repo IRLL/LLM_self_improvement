@@ -14,8 +14,8 @@ def answer_inference(model, tokenizer, answer_data):
         tokenizer=tokenizer,
         torch_dtype=torch.float16,
         device_map="auto",
-        max_new_tokens=200, 
-        num_beams=5,
+        max_new_tokens=100, 
+        num_beams=3,
         num_return_sequences=1
 
     )
@@ -28,17 +28,16 @@ def answer_inference(model, tokenizer, answer_data):
             index_dict.append((key, each_instance_idx))
 
         assert len(value['Answer Prediction Prompt Dataset']) == len(value['Instances'])
-    print("texts",len(texts))
 
     result = []
     idx = 0
     for each in tqdm.tqdm(texts):
-        res = f"ahhahahha{random.randint(3,300)}"#pipeline(each)
-        # output_text = res['generated_text'][len(texts[idx]):]
-        # truncated_result = output_text.strip()
+        res = pipeline(each)
+        output_text = res[0]['generated_text'][len(each):]
+        truncated_result = output_text.strip()
         # result.append(truncated_result)
         # print(result)
-        result.append(res)
+        result.append(truncated_result)
 
     for i, text in enumerate(texts):
         task, index = index_dict[i]
@@ -50,40 +49,47 @@ def answer_inference(model, tokenizer, answer_data):
     return answer_data
 
 @log_method
-def feedback_inference(model, tokenizer, feedback_prompt_data):
+def feedback_inference(model, tokenizer, feedback_prompt_data, new_example_indices_dict):
     pipeline = transformers.pipeline(
         "text-generation",
         model=model,
         tokenizer=tokenizer,
         torch_dtype=torch.float16,
         device_map="auto",
-        max_new_tokens=200,
-        num_beams=5,
-        num_return_sequences=1
+        max_new_tokens=100,
+        # num_beams=3,
+        # num_return_sequences=1
 
     )
+    result = []
+    prompt_example_dict = {}
 
     feedback_data = feedback_prompt_data
+    for task_name in tqdm.tqdm(list(feedback_data.keys()),desc=" outer", position=0):
+        if ".json" in task_name:
+            task_dict = feedback_data[task_name]
+            selected_example_index_list = new_example_indices_dict[task_name]
+            index = 0
+            prompt_example_list = []
 
-    texts = feedback_data["all_task_feedback_gen_prompt_data"]
+            for each_feedback_prompt in tqdm.tqdm(task_dict["Feedback Prediction Prompt Dataset"],desc=" inner loop", position=1, leave=False):
+                #reason = f"fake feedback"#pipeline(each)
+                res = pipeline(each_feedback_prompt)
+                output_text = res[0]['generated_text'][len(each_feedback_prompt):]
+                truncated_result = output_text.strip()
+                #result.append(truncated_result)
 
-    result = []
-    idx = 0
-    for each in tqdm.tqdm(texts):
-        res = f"fake feedback"#pipeline(each)
-        # output_text = res['generated_text'][len(texts[idx]):]
-        # truncated_result = output_text.strip()
-        # result.append(truncated_result)
-        result.append(res)
-        #print(result)
+                if index in selected_example_index_list:
+                    prompt_example_list.append({"input":task_dict['Instances'][index]["input"],
+                                                "output":task_dict['Instances'][index]["answer_prediction"],
+                                                "reason":truncated_result})
+                result.append(truncated_result)
 
-    feedback_data["Feedback Label"]=[]
+                index+=1
 
-    for i, text in enumerate(texts):
-        # Write answer prediction to json file.
-        feedback_data["Feedback Label"].append(result[i])
-        #print(f"Input: {text}\nOutput: {result[i]['generated_text']}\n")
+            prompt_example_dict[task_name] = prompt_example_list
 
+    feedback_data["Feedback Label"] = result
 
     del pipeline
-    return feedback_data
+    return feedback_data, prompt_example_dict

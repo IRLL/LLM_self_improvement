@@ -15,13 +15,13 @@ from trl import SFTTrainer
 from peft import LoraConfig,get_peft_model
 # from datasets import load_metric
 
-from datasets import load_dataset
-
 from torchmetrics.text.rouge import ROUGEScore
 
 from dataset_helpers import FinetuneDataset, NIevalDataset
 from peft import PeftModel
+from utils import log_method
 
+@log_method
 def finetune(model, tokenizer, result_save_path, feedback_dataset):
     rouge = ROUGEScore()
 
@@ -43,10 +43,11 @@ def finetune(model, tokenizer, result_save_path, feedback_dataset):
         # Assuming labels are not already strings:
         decoded_labels = tokenizer.batch_decode(labels, skip_special_tokens=True)
         rouge_score = rouge(decoded_preds, decoded_labels)
-
+        print(rouge_score)
         with open(os.path.join(result_save_path,"rouge.json"),'w') as obj:
-            obj.write(json.dumps(rouge_score))
+            obj.write(json.dumps({k: v.item() for k, v in rouge_score.items()}))
 
+        
         return {"rouge_score": rouge_score}
 
     target_modules = ['q_proj','k_proj','v_proj','o_proj','gate_proj','down_proj','up_proj']#,'lm_head']
@@ -68,8 +69,6 @@ def finetune(model, tokenizer, result_save_path, feedback_dataset):
         num_train_epochs=1,
         per_device_train_batch_size=8,
         gradient_accumulation_steps=1,
-        save_steps=25,
-        eval_steps=3,
         logging_steps=25,
         learning_rate=2e-4,
         weight_decay=0.001,

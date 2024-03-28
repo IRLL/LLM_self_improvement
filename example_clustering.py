@@ -123,14 +123,17 @@ def get_new_examples(bert, tokenizer, experiment_root_path, answer_dataset, k):
 
     center_indices_dict = {}
 
+    # for key in answer_dataset.keys():
+    #     reduced_vectors, centers, closest_data_indices = find_center_examples(bert, tokenizer, answer_dataset[key],k)
+    #     #TODO:make sure the path is correct.
+    #     task_result_path = os.path.join(experiment_root_path, "clustering",key.split('.json')[0])
+    #     os.makedirs(task_result_path)
+    #     torch.save(reduced_vectors,os.path.join(task_result_path,"reduced_vectors.pt"))
+    #     torch.save(centers,os.path.join(task_result_path,"centers.pt"))
+    #     torch.save(closest_data_indices,os.path.join(task_result_path,"closest_data_indices.pt"))
+    #     center_indices_dict[key] = closest_data_indices
+
     for key in answer_dataset.keys():
-        reduced_vectors, centers, closest_data_indices = find_center_examples(bert, tokenizer, answer_dataset[key],k)
-        #TODO:make sure the path is correct.
-        task_result_path = os.path.join(experiment_root_path, key.split('.json')[0])
-        os.makedirs(task_result_path)
-        torch.save(reduced_vectors,os.path.join(task_result_path,"reduced_vectors.pt"))
-        torch.save(centers,os.path.join(task_result_path,"centers.pt"))
-        torch.save(closest_data_indices,os.path.join(task_result_path,"closest_data_indices.pt"))
-        center_indices_dict[key] = closest_data_indices
+        center_indices_dict[key] = [0,1]
 
     return center_indices_dict

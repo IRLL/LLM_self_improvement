@@ -23,7 +23,7 @@ def eval_boolq(model, tokenizer, boolq_eval_path, boolq_eval_result_path):
         boolq_data = json.loads(obj.read())
 
     #print(len(boolq_data))
-    boolq_data =boolq_data[:10]
+    boolq_data =boolq_data[:500]
 
     prompt = """Write a response that appropriately completes answer the question, follow the examples. Your answer should be "True" or "False".
 

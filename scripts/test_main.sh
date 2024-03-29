@@ -1,5 +1,5 @@
 #!/bin/bash
-
+rm -rf logs/gpu_logs/7b_main.log
 # Start logging GPU usage in the background
 while true; do
     nvidia-smi >> logs/gpu_logs/7b_main.log

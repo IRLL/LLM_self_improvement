@@ -14,7 +14,7 @@ from inference_helpers import answer_inference, feedback_inference
 from prompt_compose_helpers import construct_answer_prompts, construct_feedback_prompts
 from finetune import finetune
 from eval_boolq import eval_boolq
-
+from squad_evaluation import eval_squad
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 os.environ["CUDA_VISIBLE_DEVICES"] = "0,1,2,3"
@@ -100,23 +100,26 @@ def main():
             obj.write(json.dumps(prompt_example_dict))
 
         model.train()
+        model.config.use_cache = False
         finetune(model, tokenizer, cur_iter_root_path, feedback_dataset_path)
+        model.config.use_cache = True
 
         # evaluation section.
         eval_boolq(model, tokenizer, 
                 boolq_eval_path="/home/qianxi/scratch/laffi/datasets/boolq/eval_boolq.json", 
                 boolq_eval_result_path=os.path.join(cur_iter_root_path,"boolq_eval_result.json"))
 
-        # transformed_squad_eval_set_path = '/home/qianxi/scratch/laffi/datasets/squad2/processed_eval_dataset.json'
-        # original_squad_eval_set_path = "/home/qianxi/scratch/laffi/datasets/squad2/squad_official_eval.json"
-        # squad_response_gen_file = os.path.join(cur_iter_root_path, "squad_reponse_prediction.json")
-        # squad_eval_result_path = os.path.join(cur_iter_root_path, "squad_eval_result.json")
-        # eval_squad(model,
-        #            tokenizer,
-        #            transformed_squad_eval_set_path, 
-        #            original_squad_eval_set_path,
-        #            squad_response_gen_file,
-        #            squad_eval_result_path)
+        transformed_squad_eval_set_path = "/home/qianxi/scratch/laffi/datasets/squad2/truncated_processed_eval_dataset.json" #'/home/qianxi/scratch/laffi/datasets/squad2/processed_eval_dataset.json'
+        original_squad_eval_set_path = "/home/qianxi/scratch/laffi/datasets/squad2/truncated_squal_eval.json"
+        squad_response_gen_file = os.path.join(cur_iter_root_path, "squad_reponse_prediction.json")
+        squad_eval_result_path = os.path.join(cur_iter_root_path, "squad_eval_result.json")
+
+        eval_squad(model,
+                   tokenizer,
+                   transformed_squad_eval_set_path, 
+                   original_squad_eval_set_path,
+                   squad_response_gen_file,
+                   squad_eval_result_path)
 
 
 if __name__ == "__main__":

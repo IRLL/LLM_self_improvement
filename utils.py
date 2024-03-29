@@ -67,12 +67,6 @@ def calculate_classification_metrics(predictions, labels):
         "accuracy": accuracy
     }
 
-def replace_cur_examples(feedback_dataset_path, new_example_indices_dict):
-    with open(feedback_dataset_path) as obj:
-        example_json = json.loads(obj.read())
-
-    for key in example_json.keys():
-        pass
 
 @log_method
 def load_model(model_path, four_bit_quant, adapter_path=None):
@@ -90,9 +84,12 @@ def load_model(model_path, four_bit_quant, adapter_path=None):
 
     model = AutoModelForCausalLM.from_pretrained(model_path,
                                                 quantization_config=quant_config,
+                                                #load_in_8bit=True,
                                                 low_cpu_mem_usage=True,
-                                                use_cache=False,
+                                                
+                                                use_cache=True,
                                                 device_map="auto")
+
 
     if adapter_path:
         model = PeftModel.from_pretrained(model,model_id=adapter_path)
@@ -104,5 +101,5 @@ def load_tokenizer(model_path):
     # Load tokenizer.
     tokenizer = AutoTokenizer.from_pretrained(model_path)
     tokenizer.pad_token = tokenizer.eos_token
-    tokenizer.padding_side = "right"
+    tokenizer.padding_side = "left"
     return tokenizer

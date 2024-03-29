@@ -24,7 +24,7 @@ def eval_squad(model,
         max_new_tokens=20)
 
     with open(transformed_squad_eval_set_path) as obj:
-        file = json.loads(obj.read())[:30]
+        file = json.loads(obj.read())
 
     # all_data = file["data"]#["paragraphs"]["qas"]
     res_dict = {}

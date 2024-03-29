@@ -76,7 +76,7 @@ class CustomDataset(Dataset):
 # Initialize tokenizer
 tokenizer = AutoTokenizer.from_pretrained(model_path)
 tokenizer.pad_token = tokenizer.eos_token
-tokenizer.padding_side = "right"
+tokenizer.padding_side = "left"
 # Create dataset and dataloader
 # dataset = CustomDataset(tokenizer, filename="/home/qianxi/scratch/laffi/datasets/test.json")
 dataset = load_dataset("mlabonne/guanaco-llama2-1k", split="train")

@@ -1,22 +1,28 @@
 import transformers
 import torch
-import os,tqdm,json
+import os,tqdm,json,time
 
 import random
 
 from utils import log_method
 
+
+
 @log_method
 def answer_inference(model, tokenizer, answer_data):
+
+     
     pipeline = transformers.pipeline(
         "text-generation",
         model=model,
         tokenizer=tokenizer,
         torch_dtype=torch.float16,
         device_map="auto",
-        max_new_tokens=100, 
-        num_beams=3,
-        num_return_sequences=1
+        max_new_tokens=50, 
+        do_sample=True
+        # num_beams=3,
+        # num_return_sequences=1,
+        #batch_size=1
 
     )
 
@@ -30,7 +36,8 @@ def answer_inference(model, tokenizer, answer_data):
         assert len(value['Answer Prediction Prompt Dataset']) == len(value['Instances'])
 
     result = []
-    idx = 0
+
+
     for each in tqdm.tqdm(texts):
         res = pipeline(each)
         output_text = res[0]['generated_text'][len(each):]
@@ -57,6 +64,7 @@ def feedback_inference(model, tokenizer, feedback_prompt_data, new_example_indic
         torch_dtype=torch.float16,
         device_map="auto",
         max_new_tokens=100,
+        do_sample=True
         # num_beams=3,
         # num_return_sequences=1
 

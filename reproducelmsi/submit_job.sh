@@ -14,13 +14,15 @@
 module load StdEnv/2023 gcc/12.3 cuda/12.2 arrow/14.0.1 python/3.11.5 ; 
 
 source /home/qianxi/scratch/laffi/march_env/bin/activate;
-cd /home/qianxi/scratch/laffi/code/;
+cd /home/qianxi/scratch/laffi/code/reproducelmsi;
 wandb offline;
 export WANDB_API_KEY=b363daac0bf911130cb2eff814388eaf99942a0b;
 
-CUDA_VISIBLE_DEVICES=0 python /home/qianxi/scratch/laffi/code/main.py \
+CUDA_VISIBLE_DEVICES=0 python /home/qianxi/scratch/laffi/code/reproducelmsi/lmsi.py \
                                 --base_dataset_path="/home/qianxi/scratch/laffi/datasets/natural_instruction_v1/train" \
                                 --enable_boolq_eval=1 \
                                 --enable_squad_eval=1 \
                                 --per_task_data_rows=100 \
-                                --iteration_amount=5 2>&1 | tee /home/qianxi/scratch/laffi/code/logs/program_logs/7b_official_1gpu_apr1.log
+                                --experiment_name="reproduce_lmsi" \
+                                --experiment_root_path="/home/qianxi/scratch/laffi/code/reproducelmsi/results" \
+                                --iteration_amount=5 2>&1 | tee /home/qianxi/scratch/laffi/code/logs/program_logs/7b_official_1gpu_lmsi.log

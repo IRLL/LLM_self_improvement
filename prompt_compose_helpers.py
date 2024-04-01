@@ -24,14 +24,14 @@ def construct_answer_prompts(base_dataset_path,
                      task_examples,
                      pos_example_amount,
                      negative_example_amount):
-        prompt = "### Examples:\n"
+        prompt = ""
         if example_source == "human":
             examples = []
             if pos_example_amount:
                 pos_example = task_examples["Positive Examples"][:pos_example_amount]
                 examples += pos_example
                 for each_example in pos_example:
-                    prompt += f"""##Task:\n{each_example["input"]}\n##Answer:\n{each_example["output"]}\n\n"""
+                    prompt += f"""### Task:\n{each_example["input"]}\n\n### Answer:\n{each_example["output"]}\n\n"""
                 
             if negative_example_amount:
                 neg_example = task_examples["Negative Examples"][:negative_example_amount]
@@ -39,12 +39,12 @@ def construct_answer_prompts(base_dataset_path,
 
                 if '-' not in neg_example:
                     for each_example in neg_example:
-                        prompt +=  f"""##Task:\n{each_example["input"]}\n##Answer:\n{each_example["output"]}\n\n"""
+                        prompt +=  f"""### Task:\n{each_example["input"]}\n\n### Answer:\n{each_example["output"]}\n\n"""
 
         else: 
             examples = task_examples
             for each_example in task_examples:
-                prompt += f"""##Task:\n{each_example["input"]}\n##Answer:\n{each_example["output"]}\n\n"""
+                prompt += f"""### Task:\n{each_example["input"]}\n\n### Answer:\n{each_example["output"]}\n\n"""
 
 
         return prompt, examples
@@ -83,12 +83,14 @@ def construct_answer_prompts(base_dataset_path,
                                                                      neg_example_amount)
 
 
-            # Compose context.
-            context = f"""### Instruction:\n{task_definition} {caution}\n\n"""
+            # Compose instruction.
+            instruction = f"""{task_definition} {caution}\n\n"""
+
+            context = f"""Please refer to the instruction and task information and give your answers. You need to follow the examples we provided."""
 
             # Compose full_prompt for each instance.
             for idx,instance in enumerate(instances):
-                full_prompt = f"""{context}{example_prompt}\n\n### Task:\n{instance['input']}\n### Answer:\n"""
+                full_prompt = f"""### Context:\n{context}\n\n### Instruction:\n{instruction}### Examples:\n{example_prompt}### Task:\n{instance['input']}\n\n### Answer:\n"""
                 per_task_prompt_list.append(full_prompt)
                 
 
@@ -117,9 +119,9 @@ for each task:
 
 """
     def compose_feedback_examples(examples):
-        prompt = "### Examples:\n"
+        prompt = ""
         for each_example in examples:
-            single_prompt = f"""##Task:\n{each_example["input"]}\n##Predicted Answer: {each_example["output"]}\n##Feedback:\n{each_example["reason"]}\n\n"""
+            single_prompt = f"""### Task:\n{each_example["input"]}\n\n### Standard Answer:\n{each_example["output"]}\n\n### Predicted Answer:\n{each_example["output"]}\n\n###Feedback:\n{each_example["reason"]}. So the answer should be {each_example["output"]}\n\n"""
             prompt += single_prompt
 
         return prompt
@@ -144,11 +146,11 @@ for each task:
         # Compose examples prompt.
         example_prompt = compose_feedback_examples(loaded_examples[task_name])
 
-        feedback_prompt = """Please refer to the instruction and task, compare the standard answer and the predicted answer, provide your feedback for whether you think the predict answer is proper and the reasons. You need to follow the examples we provided."""
-        context = f"""### Instruction:\n{feedback_prompt}\n##Task:\n{task_definition} {caution} \n\n"""
+        feedback_prompt = """Please refer to the instruction and task information, compare the standard answer and the predicted answer, provide your feedback for whether you think the predict answer is proper and the reasons. You need to follow the examples we provided."""
+        context = f"""{feedback_prompt}\n\n### Instruction:\n{task_definition} {caution} \n\n"""
 
-        feedback_input_no_examples = """Please refer to the instruction and task, compare the standard answer and the predicted answer, provide your feedback for whether you think the predict answer is proper and the reasons."""
-        no_example_context = f"""### Instruction:\n{feedback_input_no_examples}\n##Task:\n{task_definition} {caution} \n\n"""
+        feedback_input_no_examples = """Please refer to the instruction and task information, compare the standard answer and the predicted answer, provide your feedback for whether you think the predict answer is proper and the reasons."""
+        no_example_context = f"""{feedback_input_no_examples}\n\n### Instruction:\n{task_definition} {caution} \n\n"""
 
         # Compose full_prompt for each instance.
         for instance in instances:
@@ -156,8 +158,8 @@ for each task:
             if isinstance(standard_answer, list):
                 standard_answer = instance['output'][0]
 
-            full_prompt = f"""{context}{example_prompt}### Task:\n{instance['input']}### Standard Answer:\n{standard_answer}\n### Predicted Answer:\n{instance['answer_prediction']}\n### Feedback:\n"""
-            no_example_full_prompt = f"""{no_example_context}### Task:\n{instance['input']}### Standard Answer:\n{standard_answer}\n### Predicted Answer:\n{instance['answer_prediction']}\n### Feedback:\n"""
+            full_prompt = f"""### Context:\n{context}### Examples:\n{example_prompt}### Task:\n{instance['input']}\n\n### Standard Answer:\n{standard_answer}\n\n### Predicted Answer:\n{instance['answer_prediction']}\n\n### Feedback:\n"""
+            no_example_full_prompt = f"""### Context:\n{no_example_context}### Task:\n{instance['input']}\n\n### Standard Answer:\n{standard_answer}\n\n### Predicted Answer:\n{instance['answer_prediction']}\n\n### Feedback:\n"""
 
             per_task_prompt_list.append(full_prompt)
             per_task_no_example_input_list.append(no_example_full_prompt)

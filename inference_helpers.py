@@ -9,7 +9,7 @@ from utils import log_method
 
 
 @log_method
-def answer_inference(model, tokenizer, answer_data):
+def answer_inference(model, tokenizer, answer_data, debug):
 
      
     pipeline = transformers.pipeline(
@@ -39,9 +39,12 @@ def answer_inference(model, tokenizer, answer_data):
 
 
     for each in tqdm.tqdm(texts,miniters=50):
-        res = pipeline(each)
-        output_text = res[0]['generated_text'][len(each):]
-        truncated_result = output_text.strip()
+        
+        truncated_result = "answer_fake"
+        if not debug:
+            res = pipeline(each)
+            output_text = res[0]['generated_text'][len(each):]
+            truncated_result = output_text.strip()
         # result.append(truncated_result)
         # print(result)
         result.append(truncated_result)
@@ -56,7 +59,7 @@ def answer_inference(model, tokenizer, answer_data):
     return answer_data
 
 @log_method
-def feedback_inference(model, tokenizer, feedback_prompt_data, new_example_indices_dict):
+def feedback_inference(model, tokenizer, feedback_prompt_data, new_example_indices_dict, debug):
     pipeline = transformers.pipeline(
         "text-generation",
         model=model,
@@ -82,9 +85,11 @@ def feedback_inference(model, tokenizer, feedback_prompt_data, new_example_indic
 
             for each_feedback_prompt in tqdm.tqdm(task_dict["Feedback Prediction Prompt Dataset"],desc="Each row of task", position=1, leave=False):
                 #reason = f"fake feedback"#pipeline(each)
-                res = pipeline(each_feedback_prompt)
-                output_text = res[0]['generated_text'][len(each_feedback_prompt):]
-                truncated_result = output_text.strip()
+                truncated_result = "feedback_fake"
+                if not debug:
+                    res = pipeline(each_feedback_prompt)
+                    output_text = res[0]['generated_text'][len(each_feedback_prompt):]
+                    truncated_result = output_text.split('\n\n')[0].strip()
                 #result.append(truncated_result)
 
                 if index in selected_example_index_list:

@@ -19,7 +19,6 @@ def log_method(func):
 def parse_arguments():
     parser = argparse.ArgumentParser(description="Fine-tuning LLM")
     # LaFFi related logic
-    parser.add_argument("--feedback_dataset_path", type=str, help="Path for the feedback prediction dataset")
     parser.add_argument("--base_dataset_path", default="/home/qianxi/scratch/laffi/datasets/natural_instruction_v1/train", type=str, help="Path for the base dataset")
     parser.add_argument('--experiment_root_path', type=str, default="/home/qianxi/scratch/laffi/code/results/",help='Root directory for storing results.')
     parser.add_argument('--experiment_name', type=str, default="official",help='This experiment name')
@@ -30,9 +29,8 @@ def parse_arguments():
     parser.add_argument("--enable_squad_eval", type=int, default=0, help="If true, enable squad evaluation")
     parser.add_argument("--per_task_data_rows", type=int, default=10, help="How many training data rows to get from each task file")
 
-    parser.add_argument("--clusters", type=int, default=2, help="Number of cluster centers for this task.")
     parser.add_argument("--iteration_amount", type=int,default=2, help="Iteration #")
-    parser.add_argument("--pos_example_amount", type=int, default=2, help="Number of positive examples for this task.")
+    parser.add_argument("--pos_example_amount", type=int, default=3, help="Number of positive examples for this task.")
     parser.add_argument("--neg_example_amount", type=int, default=0, help="Number of negative examples for this task.")
     parser.add_argument("--current_examples_path", type=str, default=None, help="Path for the base dataset")
     parser.add_argument("--adapter_path", type=str, default=None, help="Adapter path")
@@ -46,12 +44,6 @@ def parse_arguments():
     parser.add_argument("--original_squad_eval_set_path", type=str, default=None, help="Original SQuAD eval set path")
     parser.add_argument("--squad_response_gen_file", type=str, default=None, help="squad_response_gen_file")
     parser.add_argument("--squad_eval_result_path", type=str, default=None, help="squad_eval_result_path")
-
-    # Finetuning related arguments.
-
-    # parser.add_argument("--enable_ds", type=int, default=0, help="Whether to use deepspeed for finetuning.")
-    # parser.add_argument("--ds_config_path", type=str, default="/home/qianxi/scratch/laffi/code/ds_config.json", help="ds config path")
-    # parser.add_argument("--parent_root", type=str, default="/home/qianxi/scratch/laffi", help="Root directory for the project")
 
 
     return parser.parse_args()

@@ -8,3 +8,4 @@ clustering_test/split_test.json
 
 wandb/.*
 wandb/*
+reproducelmsi/wandb/*

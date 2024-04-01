@@ -26,7 +26,7 @@ def finetune(model, tokenizer, result_save_path, feedback_dataset):
     rouge = ROUGEScore()
 
     deepspeed_config_path = None
-
+    rouge_result = []
     # Assuming your JSON data is in 'data.json', and located in the same directory as this script
 
     # Create dataset and dataloader
@@ -44,8 +44,8 @@ def finetune(model, tokenizer, result_save_path, feedback_dataset):
         decoded_labels = tokenizer.batch_decode(labels, skip_special_tokens=True)
         rouge_score = rouge(decoded_preds, decoded_labels)
         print(rouge_score)
-        with open(os.path.join(result_save_path,"rouge.json"),'w') as obj:
-            obj.write(json.dumps({k: v.item() for k, v in rouge_score.items()}))
+
+        rouge_result.append({k: v.item() for k, v in rouge_score.items()})
 
         
         return {"rouge_score": rouge_score}
@@ -66,8 +66,8 @@ def finetune(model, tokenizer, result_save_path, feedback_dataset):
     # Training settings
     training_params = TrainingArguments(
         output_dir=result_save_path,
-        num_train_epochs=1,
-        per_device_train_batch_size=8,
+        num_train_epochs=3,
+        per_device_train_batch_size=2,
         gradient_accumulation_steps=1,
         logging_steps=25,
         learning_rate=2e-4,
@@ -104,5 +104,14 @@ def finetune(model, tokenizer, result_save_path, feedback_dataset):
     trainer.train()
     model.save_pretrained(result_save_path)
     model = model.merge_and_unload()
+
+    with open(os.path.join(result_save_path,"rouge.json"),'w') as obj:
+        obj.write(json.dumps(rouge_result))
+
     # metrics=trainer.evaluate()
     # print(metrics)
+    del finetune_dataset
+    del trainer
+    del nl_eval_dataset
+
+    return model, rouge_result

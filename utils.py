@@ -25,8 +25,12 @@ def parse_arguments():
 
     parser.add_argument("--model_path", type=str, default="/home/qianxi/scratch/laffi/models/7b", help="Path for the base dataset")
 
-    
-    parser.add_argument("--iteration_amount", type=int,default=3, help="Iteration #")
+    parser.add_argument("--enable_boolq_eval", type=int, default=0, help="If true, enable boolq evaluation")
+    parser.add_argument("--enable_squad_eval", type=int, default=0, help="If true, enable squad evaluation")
+    parser.add_argument("--per_task_data_rows", type=int, default=10, help="How many training data rows to get from each task file")
+
+    parser.add_argument("--clusters", type=int, default=2, help="Number of cluster centers for this task.")
+    parser.add_argument("--iteration_amount", type=int,default=2, help="Iteration #")
     parser.add_argument("--pos_example_amount", type=int, default=2, help="Number of positive examples for this task.")
     parser.add_argument("--neg_example_amount", type=int, default=0, help="Number of negative examples for this task.")
     parser.add_argument("--current_examples_path", type=str, default=None, help="Path for the base dataset")
@@ -43,6 +47,7 @@ def parse_arguments():
     parser.add_argument("--squad_eval_result_path", type=str, default=None, help="squad_eval_result_path")
 
     # Finetuning related arguments.
+
     # parser.add_argument("--enable_ds", type=int, default=0, help="Whether to use deepspeed for finetuning.")
     # parser.add_argument("--ds_config_path", type=str, default="/home/qianxi/scratch/laffi/code/ds_config.json", help="ds config path")
     # parser.add_argument("--parent_root", type=str, default="/home/qianxi/scratch/laffi", help="Root directory for the project")
@@ -61,10 +66,10 @@ def calculate_classification_metrics(predictions, labels):
     accuracy = accuracy_score(labels, predictions)
     
     return {
-        "precision": precision,
-        "recall": recall,
-        "f1_score": f1,
-        "accuracy": accuracy
+        "boolq_precision": precision,
+        "boolq_recall": recall,
+        "boolq_f1_score": f1,
+        "boolq_accuracy": accuracy
     }
 
 

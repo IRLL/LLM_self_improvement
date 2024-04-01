@@ -2,7 +2,8 @@ import argparse
 import functools
 import json
 import logging
-import os
+import os, time
+import wandb 
 
 from datetime import datetime
 from tqdm import tqdm
@@ -17,12 +18,16 @@ from eval_boolq import eval_boolq
 from squad_evaluation import eval_squad
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
-os.environ["CUDA_VISIBLE_DEVICES"] = "0,1,2,3"
+# os.environ["CUDA_VISIBLE_DEVICES"] = "0"
 
 
 def main():
     # Load arguments.
     args = parse_arguments()
+    wandb.init(project="laffi",
+            group='official',
+            settings=wandb.Settings(start_method="fork"),
+            config=args)
     
     # Format the date and time as a string
     task_create_time_str = datetime.now().strftime("%Y-%m-%d-%H-%M-%S")
@@ -32,7 +37,7 @@ def main():
     # Create experiment root
     os.makedirs(experiment_root_path)
 
-    per_task_data_row_amount=5
+    per_task_data_row_amount=args.per_task_data_rows
 
 
     tokenizer = load_tokenizer(args.model_path)                     
@@ -71,13 +76,15 @@ def main():
                                                                                   "llm",
                                                                                   prompt_example_dict)
 
-
+        time1 = time.time()
         # Generate answer prediction dataset.
         answer_dataset = answer_inference(model, tokenizer, answer_prompt_dataset)
 
-        k=2
+        time2 = time.time()
         # Use clustering algorithm to get new examples.
-        new_example_indices_dict = get_new_examples(bert,bert_tokenizer,cur_iter_root_path, answer_dataset, k)
+        new_example_indices_dict = get_new_examples(bert,bert_tokenizer,cur_iter_root_path, answer_dataset, args.clusters)
+        
+        time3 = time.time()
 
         # Feedback generation prompts.
         # No model deploy required in this method.
@@ -88,8 +95,11 @@ def main():
             obj.write(json.dumps(feedback_prompt_data))
 
         print(f"Feedback generation for iter={iteration_version} started")
+        time4 = time.time()
         # Generate feedback dataset.
         feedback_dataset, prompt_example_dict = feedback_inference(model, tokenizer, feedback_prompt_data, new_example_indices_dict)
+
+        time5 = time.time()
 
         print(f"Feedback generation for iter={iteration_version} finished")
 
@@ -101,26 +111,50 @@ def main():
 
         model.train()
         model.config.use_cache = False
-        finetune(model, tokenizer, cur_iter_root_path, feedback_dataset_path)
+        model, rouge_result = finetune(model, tokenizer, cur_iter_root_path, feedback_dataset_path)
         model.config.use_cache = True
+        time6 = time.time()
+        wandb.log(rouge_result[-1],step=iteration_version)
+
 
         # evaluation section.
-        eval_boolq(model, tokenizer, 
-                boolq_eval_path="/home/qianxi/scratch/laffi/datasets/boolq/eval_boolq.json", 
-                boolq_eval_result_path=os.path.join(cur_iter_root_path,"boolq_eval_result.json"))
+        if args.enable_boolq_eval:
+            boolq_result = eval_boolq(model, tokenizer, 
+                                    boolq_eval_path="/home/qianxi/scratch/laffi/datasets/boolq/eval_boolq.json", 
+                                    boolq_eval_result_path=os.path.join(cur_iter_root_path,"boolq_eval_result.json"))
+            wandb.log(boolq_result,step=iteration_version)
 
-        transformed_squad_eval_set_path = "/home/qianxi/scratch/laffi/datasets/squad2/truncated_processed_eval_dataset.json" #'/home/qianxi/scratch/laffi/datasets/squad2/processed_eval_dataset.json'
-        original_squad_eval_set_path = "/home/qianxi/scratch/laffi/datasets/squad2/truncated_squal_eval.json"
-        squad_response_gen_file = os.path.join(cur_iter_root_path, "squad_reponse_prediction.json")
-        squad_eval_result_path = os.path.join(cur_iter_root_path, "squad_eval_result.json")
+        time7 = time.time()
+        
+        if args.enable_squad_eval:
+            transformed_squad_eval_set_path = "/home/qianxi/scratch/laffi/datasets/squad2/truncated_processed_eval_dataset.json" #'/home/qianxi/scratch/laffi/datasets/squad2/processed_eval_dataset.json'
+            original_squad_eval_set_path = "/home/qianxi/scratch/laffi/datasets/squad2/truncated_squal_eval.json"
+            squad_response_gen_file = os.path.join(cur_iter_root_path, "squad_reponse_prediction.json")
+            squad_eval_result_path = os.path.join(cur_iter_root_path, "squad_eval_result.json")
 
-        eval_squad(model,
-                   tokenizer,
-                   transformed_squad_eval_set_path, 
-                   original_squad_eval_set_path,
-                   squad_response_gen_file,
-                   squad_eval_result_path)
+            squad_result = eval_squad(model,
+                                    tokenizer,
+                                    transformed_squad_eval_set_path, 
+                                    original_squad_eval_set_path,
+                                    squad_response_gen_file,
+                                    squad_eval_result_path)
+            wandb.log(squad_result,step=iteration_version)
 
+        time8 = time.time()
+
+        time_dict = {}
+        time_dict["answer_inference_time"] = time2-time1
+        time_dict["clustering_time"] = time3-time2
+        time_dict["fb_inference_time"] = time5-time4
+        time_dict["finetune_time"] = time6-time5
+        if args.enable_boolq_eval:
+            time_dict["boolq_time"] = time7-time6
+        if args.enable_squad_eval:
+            time_dict["squad_time"] = time8-time7
+
+        wandb.log(time_dict,step=iteration_version)
+
+    wandb.finish()
 
 if __name__ == "__main__":
     main()

@@ -5,3 +5,6 @@ results
 __pycache__
 /__pycache__
 clustering_test/split_test.json
+
+wandb/.*
+wandb/*

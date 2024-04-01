@@ -58,7 +58,7 @@ def eval_boolq(model, tokenizer, boolq_eval_path, boolq_eval_result_path):
 
     predictions = []
     labels = []
-    for idx, item in tqdm.tqdm(enumerate(boolq_data)): 
+    for idx, item in tqdm.tqdm(enumerate(boolq_data),miniters=30): 
         full_prompt = prompt.format(question=item['question'], passage=item['passage'])
         result = pipeline(full_prompt)
         #print("full_prompt",full_prompt)
@@ -74,3 +74,6 @@ def eval_boolq(model, tokenizer, boolq_eval_path, boolq_eval_result_path):
 
     with open(boolq_eval_result_path,'w') as obj:
         obj.write(json.dumps(metrics))
+
+    del pipeline
+    return metrics

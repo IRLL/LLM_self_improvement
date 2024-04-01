@@ -38,7 +38,7 @@ def answer_inference(model, tokenizer, answer_data):
     result = []
 
 
-    for each in tqdm.tqdm(texts):
+    for each in tqdm.tqdm(texts,miniters=50):
         res = pipeline(each)
         output_text = res[0]['generated_text'][len(each):]
         truncated_result = output_text.strip()
@@ -73,14 +73,14 @@ def feedback_inference(model, tokenizer, feedback_prompt_data, new_example_indic
     prompt_example_dict = {}
 
     feedback_data = feedback_prompt_data
-    for task_name in tqdm.tqdm(list(feedback_data.keys()),desc=" outer", position=0):
+    for task_name in tqdm.tqdm(list(feedback_data.keys()),desc="Each task fb generation:", position=0):
         if ".json" in task_name:
             task_dict = feedback_data[task_name]
             selected_example_index_list = new_example_indices_dict[task_name]
             index = 0
             prompt_example_list = []
 
-            for each_feedback_prompt in tqdm.tqdm(task_dict["Feedback Prediction Prompt Dataset"],desc=" inner loop", position=1, leave=False):
+            for each_feedback_prompt in tqdm.tqdm(task_dict["Feedback Prediction Prompt Dataset"],desc="Each row of task", position=1, leave=False):
                 #reason = f"fake feedback"#pipeline(each)
                 res = pipeline(each_feedback_prompt)
                 output_text = res[0]['generated_text'][len(each_feedback_prompt):]

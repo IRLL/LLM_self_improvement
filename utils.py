@@ -27,11 +27,11 @@ def parse_arguments():
     parser.add_argument('--experiment_name', type=str, default="official",help='This experiment name')
 
     parser.add_argument("--model_path", type=str, default="/home/qianxi/scratch/laffi/models/7b", help="Path for the base dataset")
-
-    parser.add_argument("--enable_boolq_eval", type=int, default=0, help="If true, enable boolq evaluation")
-    parser.add_argument("--enable_squad_eval", type=int, default=0, help="If true, enable squad evaluation")
+    parser.add_argument("--wandb_enabled", type=int, default=0, help="If 0, disable wandb")
+    
     parser.add_argument("--per_task_data_rows", type=int, default=10, help="How many training data rows to get from each task file")
     parser.add_argument("--num_return_seq", type=int, default=8, help="How many response to do major voting for the feedback.")
+    parser.add_argument("--contamination", type=float, default=0.3, help="Outlier detection strength.")
 
     parser.add_argument("--clusters", type=int, default=2, help="Number of cluster centers for this task.")
     parser.add_argument("--iteration_amount", type=int,default=2, help="Iteration #")
@@ -41,14 +41,21 @@ def parse_arguments():
     parser.add_argument("--adapter_path", type=str, default=None, help="Adapter path")
 
     # BoolQ related arguments
+    parser.add_argument("--enable_boolq_eval", type=int, default=0, help="If true, enable boolq evaluation")
     parser.add_argument("--boolq_eval_path", type=str, default=None, help="Boolq eval set path")
     parser.add_argument("--boolq_eval_result_path", type=str, default=None, help="Boolq eval result path")
 
     # Squad related arguments
+    parser.add_argument("--enable_squad_eval", type=int, default=0, help="If true, enable squad evaluation")
     parser.add_argument("--transformed_squad_eval_set_path", type=str, default=None, help="Trans SQuAD eval set path")
     parser.add_argument("--original_squad_eval_set_path", type=str, default=None, help="Original SQuAD eval set path")
     parser.add_argument("--squad_response_gen_file", type=str, default=None, help="squad_response_gen_file")
     parser.add_argument("--squad_eval_result_path", type=str, default=None, help="squad_eval_result_path")
+
+    #gsm8k related arguments:
+    parser.add_argument("--enable_gsm8k_eval", type=int, default=0, help="If true, enable gsm8k evaluation")
+    parser.add_argument("--gsm8k_testset", type=str, default="/home/qianxi/scratch/laffi/datasets/GSM8K/grade_school_math/data/test.json", help="gsm8k_testset")
+
 
     # Finetuning related arguments.
 
@@ -95,7 +102,7 @@ def load_model(model_path, four_bit_quant, adapter_path=None):
     max_memory = {}
     if n_gpus >= 2:
 
-        max_memory[0] = "4GIB"
+        max_memory[0] = "5GIB"
         max_memory[1] = "16GIB"
     else:
         max_memory[0] = "16GIB"

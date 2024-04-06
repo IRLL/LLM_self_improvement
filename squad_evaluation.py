@@ -23,6 +23,7 @@ def eval_squad(model,
         device_map="auto",
         max_new_tokens=20)
 
+    pipeline.tokenizer.pad_token_id = pipeline.model.config.eos_token_id
     with open(transformed_squad_eval_set_path) as obj:
         file = json.loads(obj.read())
 

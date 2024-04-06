@@ -74,7 +74,7 @@ def major_vote_response(model, tokenizer, responses, contamination, batch_size):
     outliers = response_vectors_2d[invalid_indices]
     responses = [responses[i] for i in valid_indices]
     # Clustering
-    kmeans = KMeans(n_clusters=1)
+    kmeans = KMeans(n_clusters=1,n_init='auto')
     cluster_labels = kmeans.fit_predict(pure_vectors)
 
     # Identify cluster center
@@ -84,7 +84,7 @@ def major_vote_response(model, tokenizer, responses, contamination, batch_size):
     data_center = pure_vectors[selected_idx]
     selected = responses[selected_idx]
 
-    return selected, outliers, response_vectors_2d, cluster_center, data_center
+    return selected, outliers, response_vectors_2d, cluster_center, data_center, pure_vectors
 
 
 @log_method
@@ -102,6 +102,7 @@ def answer_inference(model, tokenizer, answer_data, debug):
         # batch_size=1
 
     )
+    pipeline.tokenizer.pad_token_id = pipeline.model.config.eos_token_id
 
     texts = []
     index_dict = []
@@ -144,21 +145,36 @@ def feedback_inference(model,
                        num_return_seq,
                        bert_model,
                        bert_tokenizer,
+                       contamination,
                        debug):
+
+    n_gpus = torch.cuda.device_count()
+    max_memory = {}
+    if n_gpus >= 2:
+
+        max_memory[0] = "3GIB"
+        max_memory[1] = "16GIB"
+    else:
+        max_memory[0] = "16GIB"
     pipeline = transformers.pipeline(
         "text-generation",
         model=model,
         tokenizer=tokenizer,
         torch_dtype=torch.float16,
-        device_map="auto",
+        device_map="sequential",
+        # max_memory=max_memory,
         max_new_tokens=100,
         do_sample=True,
         num_return_sequences=num_return_seq
 
     )
+    pipeline.tokenizer.pad_token_id = pipeline.model.config.eos_token_id
 
     result = []
     prompt_example_dict = {}
+    log_counter=0
+    major_voting_log = []
+
 
     feedback_data = feedback_prompt_data
     for task_name in tqdm.tqdm(list(feedback_data.keys()), desc="Each task fb generation:", position=0):
@@ -175,16 +191,33 @@ def feedback_inference(model,
                     res = pipeline(each_feedback_prompt)
                     truncated_result = [res[i]['generated_text'][len(each_feedback_prompt):].split(
                         '\n\n')[0].strip() for i in range(len(res))]
-                    voted_feedback, outliers, response_vectors_2d, cluster_center, data_center = major_vote_response(
-                        bert_model, bert_tokenizer, truncated_result, contamination=0.3, batch_size=num_return_seq)
 
+
+                    if len(truncated_result) == 1:
+                        result.append(truncated_result[0])
+                        voted_feedback= truncated_result
+                        
+                    else: 
+                        voted_feedback, outliers, response_vectors_2d, cluster_center, data_center,pure_vector2d = major_vote_response(
+                            bert_model, bert_tokenizer, truncated_result, contamination=contamination, batch_size=num_return_seq)
+                        result.append(voted_feedback)
+                        if log_counter<20:
+                            tmp = {"each_feedback_prompt":each_feedback_prompt,
+                                    "truncated_result":truncated_result,
+                                    "outliers":outliers.tolist(),
+                                    "response_vectors_2d":response_vectors_2d.tolist(), 
+                                    "cluster_center":cluster_center.tolist(),
+                                    "data_center":data_center.tolist(),
+                                    "pure_vector2d":pure_vector2d.tolist()}
+                            major_voting_log.append(tmp)
+                            log_counter+=1
                 # result.append(truncated_result)
 
                 if index in selected_example_index_list:
                     prompt_example_list.append({"input": task_dict['Instances'][index]["input"],
                                                 "output": task_dict['Instances'][index]["answer_prediction"],
                                                 "reason": voted_feedback})
-                result.append(voted_feedback)
+                
 
                 index += 1
 
@@ -193,4 +226,4 @@ def feedback_inference(model,
     feedback_data["Feedback Label"] = result
 
     del pipeline
-    return feedback_data, prompt_example_dict
+    return feedback_data, prompt_example_dict,major_voting_log

@@ -59,7 +59,7 @@ def finetune(model, tokenizer, result_save_path, feedback_dataset):
                 bias="none",
                 task_type="CAUSAL_LM")
 
-    model.config.use_cache = False
+    #model.config.use_cache = False
     model.config.pretraining_tp = 1
     model = get_peft_model(model, lora_config)
     model.print_trainable_parameters()
@@ -71,7 +71,7 @@ def finetune(model, tokenizer, result_save_path, feedback_dataset):
         per_device_train_batch_size=1,
         gradient_accumulation_steps=1,
         logging_steps=25,
-        learning_rate=2e-4,
+        learning_rate=5e-5,
         weight_decay=0.001,
         fp16=True,
         bf16=False,
@@ -81,6 +81,7 @@ def finetune(model, tokenizer, result_save_path, feedback_dataset):
         group_by_length=True,
         lr_scheduler_type="constant",
         report_to="none",
+        logging_dir=os.path.join(result_save_path,'loss_logs'),
         evaluation_strategy="epoch",
         deepspeed=deepspeed_config_path,
         eval_accumulation_steps=2
@@ -103,8 +104,11 @@ def finetune(model, tokenizer, result_save_path, feedback_dataset):
 
     # Start training
     trainer.train()
-    model.save_pretrained(result_save_path)
+    model_save_path = os.path.join(result_save_path, "model")
+    model.save_pretrained(model_save_path)
+    tokenizer.save_pretrained(model_save_path)
     model = model.merge_and_unload()
+
 
     with open(os.path.join(result_save_path,"rouge.json"),'w') as obj:
         obj.write(json.dumps(rouge_result))

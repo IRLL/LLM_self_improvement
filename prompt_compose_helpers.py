@@ -1,4 +1,6 @@
-import json,os,copy
+import json
+import os
+import copy
 
 
 def construct_answer_prompts(base_dataset_path,
@@ -21,9 +23,9 @@ def construct_answer_prompts(base_dataset_path,
     """
 
     def compose_examples(example_source,
-                     task_examples,
-                     pos_example_amount,
-                     negative_example_amount):
+                         task_examples,
+                         pos_example_amount,
+                         negative_example_amount):
         prompt = ""
         if example_source == "human":
             examples = []
@@ -32,24 +34,22 @@ def construct_answer_prompts(base_dataset_path,
                 examples += pos_example
                 for each_example in pos_example:
                     prompt += f"""### Task:\n{each_example["input"]}\n\n### Answer:\n{each_example["output"]}\n\n"""
-                
+
             if negative_example_amount:
                 neg_example = task_examples["Negative Examples"][:negative_example_amount]
                 examples += neg_example
 
                 if '-' not in neg_example:
                     for each_example in neg_example:
-                        prompt +=  f"""### Task:\n{each_example["input"]}\n\n### Answer:\n{each_example["output"]}\n\n"""
+                        prompt += f"""### Task:\n{each_example["input"]}\n\n### Answer:\n{each_example["output"]}\n\n"""
 
-        else: 
+        else:
             examples = task_examples
             for each_example in task_examples:
                 prompt += f"""### Task:\n{each_example["input"]}\n\n### Answer:\n{each_example["output"]}\n\n"""
 
-
         return prompt, examples
 
-    
     dataset_dict = {}
     current_examples_dict = {}
     for idx, each_json in enumerate(os.listdir(base_dataset_path)):
@@ -59,7 +59,7 @@ def construct_answer_prompts(base_dataset_path,
 
             with open(full_path) as obj:
                 file = json.loads(obj.read())
-            
+
             per_task_dict = copy.deepcopy(file)
 
             task_definition = file["Definition"]
@@ -73,15 +73,14 @@ def construct_answer_prompts(base_dataset_path,
             if example_source == "human":
                 # Compose examples prompt.
                 example_prompt, per_task_examples = compose_examples(example_source,
-                                                                    file["Examples"],
-                                                                    pos_example_amount,
-                                                                    neg_example_amount)
-            else: 
+                                                                     file["Examples"],
+                                                                     pos_example_amount,
+                                                                     neg_example_amount)
+            else:
                 example_prompt, per_task_examples = compose_examples(example_source,
                                                                      prompt_example_dict[each_json],
                                                                      pos_example_amount,
                                                                      neg_example_amount)
-
 
             # Compose instruction.
             instruction = f"""{task_definition} {caution}\n\n"""
@@ -89,23 +88,22 @@ def construct_answer_prompts(base_dataset_path,
             context = f"""Please refer to the instruction and task information and give your answers. You need to follow the examples we provided."""
 
             # Compose full_prompt for each instance.
-            for idx,instance in enumerate(instances):
+            for idx, instance in enumerate(instances):
                 full_prompt = f"""### Context:\n{context}\n\n### Instruction:\n{instruction}### Examples:\n{example_prompt}### Task:\n{instance['input']}\n\n### Answer:\n"""
                 per_task_prompt_list.append(full_prompt)
-                
 
             per_task_dict["Answer Prediction Prompt Dataset"] = per_task_prompt_list
             per_task_dict["Current Examples"] = per_task_examples
-
 
             current_examples_dict[each_json] = per_task_examples
 
             dataset_dict[each_json] = per_task_dict
             del per_task_dict
-            
+
     return dataset_dict, current_examples_dict
 
-def construct_feedback_prompts(loaded_examples, 
+
+def construct_feedback_prompts(loaded_examples,
                                answer_pred_dataset):
     """
 The goal of this function is to compose the prompts for feedback generation.
@@ -129,10 +127,8 @@ for each task:
     dataset_dict = {}
     current_examples_dict = {}
 
-
     all_task_feedback_input_data = []
     all_task_feedback_gen_prompt_data = []
-
 
     for task_name, task_dict in answer_pred_dataset.items():
         per_task_prompt_list = []
@@ -165,7 +161,7 @@ for each task:
             per_task_no_example_input_list.append(no_example_full_prompt)
 
         per_task_dict["Feedback Prediction Prompt Dataset"] = per_task_prompt_list
-        #per_task_dict["Feedback Input Dataset"] = per_task_no_example_input_list
+        # per_task_dict["Feedback Input Dataset"] = per_task_no_example_input_list
 
         dataset_dict[task_name] = per_task_dict
         all_task_feedback_input_data += per_task_no_example_input_list
@@ -176,4 +172,3 @@ for each task:
     # Write feedback prompts and data to file.
 
     return dataset_dict
-

@@ -19,6 +19,7 @@ def eval_boolq(model, tokenizer, boolq_eval_path, boolq_eval_result_path):
 
 
     )
+    pipeline.tokenizer.pad_token_id = pipeline.model.config.eos_token_id
     with open(boolq_eval_path) as obj:
         boolq_data = json.loads(obj.read())
 

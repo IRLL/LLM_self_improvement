@@ -59,7 +59,7 @@ def eval_squad(model,
 
     Answer:"""
 
-    for each_row in tqdm(file,miniters=30):
+    for each_row in file:
         full_prompt = prompt.format(question=each_row['question'], context=each_row['context'])
         result = pipeline(full_prompt)
         truncated = result[0]['generated_text'][len(full_prompt):].strip()
@@ -74,7 +74,7 @@ def eval_squad(model,
         obj.write(json.dumps(res_dict))
 
     del pipeline
-    os.system(f"python scripts/official_squad_eval.py --data_file='{original_squad_eval_set_path}' --pred_file='{squad_response_gen_file}' --out-file={squad_eval_result_path}")
+    os.system(f"python official_squad_eval.py --data_file='{original_squad_eval_set_path}' --pred_file='{squad_response_gen_file}' --out-file={squad_eval_result_path}")
 
     with open(squad_eval_result_path) as obj:
         squad_result = json.loads(obj.read())

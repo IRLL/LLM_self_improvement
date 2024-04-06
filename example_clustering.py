@@ -5,7 +5,6 @@ from sklearn.cluster import KMeans
 import numpy as np
 from tqdm import tqdm
 import matplotlib.pyplot as plt
-from mpl_toolkits.mplot3d import Axes3D
 import os
 
 from utils import log_method
@@ -41,7 +40,7 @@ def batch_encode_strings(bert, tokenizer, strings, batch_size=16):
     vectors = torch.stack(vectors)
     return vectors
 
-def apply_dim_reduction(vectors, n_components=3):
+def apply_dim_reduction(vectors, n_components=2):
     pca = PCA(n_components)  # Adjust components according to your dataset size and desired variance
     reduced_vectors = pca.fit_transform(vectors)
 
@@ -94,23 +93,23 @@ def visualize_clustering(reduced_vectors, centers, closest_data):
     print("Indices of strings closest to cluster centers:", closest_data)
     # Visualization
     fig = plt.figure()
-    ax = fig.add_subplot(111, projection='3d')
+    ax = fig.add_subplot(11)
 
     # Plot the reduced vectors
-    ax.scatter(reduced_vectors[:, 0], reduced_vectors[:, 1], reduced_vectors[:, 2], alpha=0.5)
+    ax.scatter(reduced_vectors[:, 0], reduced_vectors[:, 1], alpha=0.5)
 
     # Plot the cluster centers
-    ax.scatter(centers[:, 0], centers[:, 1], centers[:, 2], color='r', marker='x', s=100, label='Centers')
+    ax.scatter(centers[:, 0], centers[:, 1], color='r', marker='x', s=100, label='Centers')
 
     # Mark the closest vectors to the cluster centers
     for index in closest_data:
-        ax.scatter(reduced_vectors[index, 0], reduced_vectors[index, 1], reduced_vectors[index, 2], 
+        ax.scatter(reduced_vectors[index, 0], reduced_vectors[index, 1], 
                 color='g', marker='o', s=100, edgecolor='k', label='Closest to Center' if index == closest_data[0] else "")
 
     ax.set_xlabel('PCA 1')
     ax.set_ylabel('PCA 2')
-    ax.set_zlabel('PCA 3')
-    ax.set_title('BERT Vectors in 3D space with Cluster Centers')
+
+    ax.set_title('BERT Vectors in 2D space with Cluster Centers')
     ax.legend()
 
     plt.savefig("1.png")

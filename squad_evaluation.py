@@ -60,7 +60,7 @@ def eval_squad(model,
 
     Answer:"""
 
-    for each_row in tqdm(file,miniters=30):
+    for each_row in file:
         full_prompt = prompt.format(question=each_row['question'], context=each_row['context'])
         result = pipeline(full_prompt)
         truncated = result[0]['generated_text'][len(full_prompt):].strip()

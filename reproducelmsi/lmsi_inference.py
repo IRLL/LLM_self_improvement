@@ -116,7 +116,7 @@ def answer_inference(model, tokenizer, answer_data):
     result = []
 
 
-    for each in tqdm.tqdm(texts,miniters=50):
+    for each in texts:
         res = pipeline(each)
         output_text = res[0]['generated_text'][len(each):]
         truncated_result = output_text.strip()

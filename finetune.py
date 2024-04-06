@@ -23,6 +23,7 @@ from utils import log_method
 
 @log_method
 def finetune(model, tokenizer, result_save_path, feedback_dataset):
+    torch.cuda.empty_cache()
     rouge = ROUGEScore()
 
     deepspeed_config_path = None
@@ -67,7 +68,7 @@ def finetune(model, tokenizer, result_save_path, feedback_dataset):
     training_params = TrainingArguments(
         output_dir=result_save_path,
         num_train_epochs=3,
-        per_device_train_batch_size=2,
+        per_device_train_batch_size=1,
         gradient_accumulation_steps=1,
         logging_steps=25,
         learning_rate=2e-4,
@@ -82,7 +83,7 @@ def finetune(model, tokenizer, result_save_path, feedback_dataset):
         report_to="none",
         evaluation_strategy="epoch",
         deepspeed=deepspeed_config_path,
-        eval_accumulation_steps=4
+        eval_accumulation_steps=2
     )
     # print(os.system("nvidia-smi"))
     # Initialize the Trainer

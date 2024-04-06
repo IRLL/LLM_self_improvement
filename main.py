@@ -3,7 +3,7 @@ import functools
 import json
 import logging
 import os, time
-import wandb 
+import wandb,torch
 
 from datetime import datetime
 from tqdm import tqdm
@@ -20,6 +20,8 @@ from squad_evaluation import eval_squad
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 # os.environ["CUDA_VISIBLE_DEVICES"] = "0"
 debug=False
+torch.backends.cudnn.enabled = True
+torch.backends.cudnn.benchmark = True
 
 def main():
     # Load arguments.
@@ -78,6 +80,7 @@ def main():
     # Loop start.
     for iteration_version in tqdm(range(args.iteration_amount)):
         # Create folder for the current iteration.
+        torch.cuda.empty_cache()
         cur_iter_root_path = os.path.join(experiment_root_path, str(iteration_version))
         os.makedirs(cur_iter_root_path)
 
@@ -128,7 +131,7 @@ def main():
         print(f"Feedback generation for iter={iteration_version} started")
         time4 = time.time()
         # Generate feedback dataset.
-        feedback_dataset, prompt_example_dict = feedback_inference(model, tokenizer, feedback_prompt_data, new_example_indices_dict, debug)
+        feedback_dataset, prompt_example_dict = feedback_inference(model, tokenizer, feedback_prompt_data, new_example_indices_dict, args.num_return_seq, bert, bert_tokenizer, debug)
 
         time5 = time.time()
 

@@ -4,6 +4,8 @@ from transformers import AutoTokenizer,AutoModelForCausalLM,BitsAndBytesConfig
 from peft import PeftModel
 import logging
 import functools
+from accelerate import infer_auto_device_map
+
 
 
 def log_method(func):
@@ -29,6 +31,7 @@ def parse_arguments():
     parser.add_argument("--enable_boolq_eval", type=int, default=0, help="If true, enable boolq evaluation")
     parser.add_argument("--enable_squad_eval", type=int, default=0, help="If true, enable squad evaluation")
     parser.add_argument("--per_task_data_rows", type=int, default=10, help="How many training data rows to get from each task file")
+    parser.add_argument("--num_return_seq", type=int, default=8, help="How many response to do major voting for the feedback.")
 
     parser.add_argument("--clusters", type=int, default=2, help="Number of cluster centers for this task.")
     parser.add_argument("--iteration_amount", type=int,default=2, help="Iteration #")
@@ -76,6 +79,7 @@ def calculate_classification_metrics(predictions, labels):
 
 @log_method
 def load_model(model_path, four_bit_quant, adapter_path=None):
+    #device_map = infer_auto_device_map(my_model, max_memory={0: "10GiB", 1: "10GiB", "cpu": "30GiB"})
     quant_config=None
     if four_bit_quant:
         # Quantization settings.
@@ -87,14 +91,25 @@ def load_model(model_path, four_bit_quant, adapter_path=None):
             bnb_4bit_use_double_quant=False,
         )
 
+    n_gpus = torch.cuda.device_count()
+    max_memory = {}
+    if n_gpus >= 2:
+
+        max_memory[0] = "4GIB"
+        max_memory[1] = "16GIB"
+    else:
+        max_memory[0] = "16GIB"
+    
+
 
     model = AutoModelForCausalLM.from_pretrained(model_path,
                                                 quantization_config=quant_config,
                                                 #load_in_8bit=True,
                                                 low_cpu_mem_usage=True,
-                                                
+                                                max_memory=max_memory,
                                                 use_cache=True,
-                                                device_map="auto")
+                                                device_map="sequential")
+    # print(model.device_map)
 
 
     if adapter_path:

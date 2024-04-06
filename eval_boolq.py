@@ -15,7 +15,7 @@ def eval_boolq(model, tokenizer, boolq_eval_path, boolq_eval_result_path):
         tokenizer=tokenizer,
         torch_dtype=torch.float16,
         device_map="auto",
-        max_new_tokens=20
+        max_new_tokens=10
 
 
     )
@@ -23,7 +23,7 @@ def eval_boolq(model, tokenizer, boolq_eval_path, boolq_eval_result_path):
         boolq_data = json.loads(obj.read())
 
     #print(len(boolq_data))
-    boolq_data =boolq_data[:300]
+    boolq_data =boolq_data[:1000]
 
     prompt = """Write a response that appropriately completes answer the question, follow the examples. Your answer should be "True" or "False".
 
@@ -54,11 +54,12 @@ def eval_boolq(model, tokenizer, boolq_eval_path, boolq_eval_result_path):
     Question:
     {question}
 
-    Answer:"""
+    Answer:
+    """
 
     predictions = []
     labels = []
-    for idx, item in tqdm.tqdm(enumerate(boolq_data),miniters=30): 
+    for idx, item in enumerate(boolq_data): 
         full_prompt = prompt.format(question=item['question'], passage=item['passage'])
         result = pipeline(full_prompt)
         #print("full_prompt",full_prompt)

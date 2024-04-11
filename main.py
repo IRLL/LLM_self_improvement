@@ -19,6 +19,8 @@ from finetune import finetune
 from eval_boolq import eval_boolq
 from squad_evaluation import eval_squad
 from eval_math import eval_gsm8k
+from torch.profiler import profile, ProfilerActivity,record_function
+
 
 logging.basicConfig(level=logging.INFO,
                     format='%(asctime)s - %(levelname)s - %(message)s')
@@ -59,42 +61,42 @@ def main():
 
     cur_iter_root_path = os.path.join(experiment_root_path, "before_finetune")
     os.makedirs(cur_iter_root_path)
-    if args.enable_boolq_eval:
+    # if args.enable_boolq_eval:
 
-        boolq_result = eval_boolq(model, tokenizer,
-                                  boolq_eval_path="/home/qianxi/scratch/laffi/datasets/boolq/eval_boolq.json",
-                                  boolq_eval_result_path=os.path.join(cur_iter_root_path, "boolq_eval_result.json"))
-        if wandb_enabled:
-            wandb.log(boolq_result, step=0)
+    #     boolq_result = eval_boolq(model, tokenizer,
+    #                               boolq_eval_path="/home/qianxi/scratch/laffi/datasets/boolq/eval_boolq.json",
+    #                               boolq_eval_result_path=os.path.join(cur_iter_root_path, "boolq_eval_result.json"))
+    #     if wandb_enabled:
+    #         wandb.log(boolq_result, step=0)
 
-    if args.enable_gsm8k_eval:
-        math_result_path = os.path.join(cur_iter_root_path, "math.json")
+    # if args.enable_gsm8k_eval:
+    #     math_result_path = os.path.join(cur_iter_root_path, "math.json")
 
-        acc = eval_gsm8k(model, tokenizer, args.gsm8k_testset, gsm8k_eval_result_path=math_result_path)
-        if wandb_enabled:
-            wandb.log({"gsm8k":acc}, step=0)
+    #     acc = eval_gsm8k(model, tokenizer, args.gsm8k_testset, gsm8k_eval_result_path=math_result_path)
+    #     if wandb_enabled:
+    #         wandb.log({"gsm8k":acc}, step=0)
 
-    if args.enable_squad_eval:
-        # '/home/qianxi/scratch/laffi/datasets/squad2/processed_eval_dataset.json'
-        transformed_squad_eval_set_path = "/home/qianxi/scratch/laffi/datasets/squad2/truncated_processed_eval_dataset.json"
-        original_squad_eval_set_path = "/home/qianxi/scratch/laffi/datasets/squad2/truncated_squal_eval.json"
-        squad_response_gen_file = os.path.join(
-            cur_iter_root_path, "squad_reponse_prediction.json")
-        squad_eval_result_path = os.path.join(
-            cur_iter_root_path, "squad_eval_result.json")
+    # if args.enable_squad_eval:
+    #     # '/home/qianxi/scratch/laffi/datasets/squad2/processed_eval_dataset.json'
+    #     transformed_squad_eval_set_path = "/home/qianxi/scratch/laffi/datasets/squad2/truncated_processed_eval_dataset.json"
+    #     original_squad_eval_set_path = "/home/qianxi/scratch/laffi/datasets/squad2/truncated_squal_eval.json"
+    #     squad_response_gen_file = os.path.join(
+    #         cur_iter_root_path, "squad_reponse_prediction.json")
+    #     squad_eval_result_path = os.path.join(
+    #         cur_iter_root_path, "squad_eval_result.json")
 
-        squad_result = eval_squad(model,
-                                  tokenizer,
-                                  transformed_squad_eval_set_path,
-                                  original_squad_eval_set_path,
-                                  squad_response_gen_file,
-                                  squad_eval_result_path)
-        if wandb_enabled:
-            wandb.log(squad_result, step=0)
+    #     squad_result = eval_squad(model,
+    #                               tokenizer,
+    #                               transformed_squad_eval_set_path,
+    #                               original_squad_eval_set_path,
+    #                               squad_response_gen_file,
+    #                               squad_eval_result_path)
+    #     if wandb_enabled:
+    #         wandb.log(squad_result, step=0)
 
-    bert = BertModel.from_pretrained(
-        'bert-base-uncased', output_hidden_states=True)
+    bert = BertModel.from_pretrained('bert-base-uncased',output_hidden_states=True)
     bert_tokenizer = BertTokenizer.from_pretrained('bert-base-uncased')
+    bert.to("cuda:1")
     prompt_example_dict = {}
     # Loop start.
     for iteration_version in tqdm(range(args.iteration_amount)):
@@ -256,4 +258,6 @@ def main():
 
 
 if __name__ == "__main__":
+
     main()
+

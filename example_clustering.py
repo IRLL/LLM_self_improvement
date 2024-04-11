@@ -24,20 +24,21 @@ def batch_encode_strings(bert, tokenizer, strings, batch_size=16):
         inputs = tokenizer(batch, padding=True, truncation=True, return_tensors="pt", max_length=512)
 
         # Move tensors to the device where the model is located
-        input_ids = inputs['input_ids']
-        attention_mask = inputs['attention_mask']
+        input_ids = inputs['input_ids'].to("cuda:1")
+        attention_mask = inputs['attention_mask'].to("cuda:1")
 
         # Get hidden states
         with torch.no_grad():
             outputs = model(input_ids, attention_mask=attention_mask)
             hidden_states = outputs.last_hidden_state  # Use the last hidden states
-        
+        del inputs, batch
         # Compute mean of all token embeddings for each sentence in the batch
         batch_vectors = hidden_states.mean(dim=1)
         vectors.extend(batch_vectors)
+        del batch_vectors
 
     # Convert the list of tensors to a single tensor
-    vectors = torch.stack(vectors)
+    vectors = torch.stack(vectors).cpu()
     return vectors
 
 def apply_dim_reduction(vectors, n_components=2):

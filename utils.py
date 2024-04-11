@@ -5,8 +5,18 @@ from peft import PeftModel
 import logging
 import functools
 from accelerate import infer_auto_device_map
+import gc
 
+class ClearCache:
+    def __enter__(self):
+        gc.collect()
+        torch.cuda.empty_cache()
+        
 
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        gc.collect()
+        torch.cuda.empty_cache()
+        
 
 def log_method(func):
     """Decorator to log the start and end of a method."""
@@ -26,11 +36,13 @@ def parse_arguments():
     parser.add_argument('--experiment_root_path', type=str, default="/home/qianxi/scratch/laffi/code/results/",help='Root directory for storing results.')
     parser.add_argument('--experiment_name', type=str, default="official",help='This experiment name')
 
+    parser.add_argument('--baseline_only', type=int, default=0,help='None')
+
     parser.add_argument("--model_path", type=str, default="/home/qianxi/scratch/laffi/models/7b", help="Path for the base dataset")
     parser.add_argument("--wandb_enabled", type=int, default=0, help="If 0, disable wandb")
     
     parser.add_argument("--per_task_data_rows", type=int, default=10, help="How many training data rows to get from each task file")
-    parser.add_argument("--num_return_seq", type=int, default=8, help="How many response to do major voting for the feedback.")
+    parser.add_argument("--num_return_seq", type=int, default=5, help="How many response to do major voting for the feedback.")
     parser.add_argument("--contamination", type=float, default=0.3, help="Outlier detection strength.")
 
     parser.add_argument("--clusters", type=int, default=2, help="Number of cluster centers for this task.")
@@ -113,9 +125,9 @@ def load_model(model_path, four_bit_quant, adapter_path=None):
                                                 quantization_config=quant_config,
                                                 #load_in_8bit=True,
                                                 low_cpu_mem_usage=True,
-                                                max_memory=max_memory,
+                                                #max_memory=max_memory,
                                                 use_cache=True,
-                                                device_map="sequential")
+                                                device_map="auto")
     # print(model.device_map)
 
 

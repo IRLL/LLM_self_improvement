@@ -10,8 +10,8 @@ from sklearn.decomposition import PCA
 from sklearn.cluster import KMeans
 
 from sklearn.ensemble import IsolationForest
-from utils import log_method
-
+from utils import log_method,ClearCache
+from sklearn.impute import SimpleImputer
 
 def major_vote_response(model, tokenizer, responses, contamination, batch_size):
     def find_most_centered_data(center, reduced_vectors):
@@ -35,8 +35,8 @@ def major_vote_response(model, tokenizer, responses, contamination, batch_size):
                                return_tensors="pt", max_length=512)
 
             # Move tensors to the device where the model is located
-            input_ids = inputs['input_ids']
-            attention_mask = inputs['attention_mask']
+            input_ids = inputs['input_ids'].to("cuda:1")
+            attention_mask = inputs['attention_mask'].to("cuda:1")
 
             # Get hidden states
             with torch.no_grad():
@@ -48,19 +48,21 @@ def major_vote_response(model, tokenizer, responses, contamination, batch_size):
             vectors.extend(batch_vectors)
 
         # Convert the list of tensors to a single tensor
-        vectors = torch.stack(vectors)
+        vectors = torch.stack(vectors).cpu()
         return vectors
 
     # Encode responses to get the vectors
     response_vectors = batch_encode_strings(
         model, tokenizer, responses, batch_size)
 
+    imputer = SimpleImputer(strategy='mean')
+    response_vectors = imputer.fit_transform(response_vectors)
     # # Convert list of tensors to a single tensor
     # response_vectors = torch.stack(encoded_responses)
 
     # Dimensionality reduction using PCA
     pca = PCA(n_components=2)
-    response_vectors_2d = pca.fit_transform(response_vectors.numpy())
+    response_vectors_2d = pca.fit_transform(response_vectors)
 
     # Save the 2D vectors as a torch tensor locally
 
@@ -89,50 +91,52 @@ def major_vote_response(model, tokenizer, responses, contamination, batch_size):
 
 @log_method
 def answer_inference(model, tokenizer, answer_data, debug):
+    with ClearCache():
+        pipeline = transformers.pipeline(
+            "text-generation",
+            model=model,
+            tokenizer=tokenizer,
+            torch_dtype=torch.float16,
+            device_map="auto",
+            max_new_tokens=50,
+            do_sample=True,
+            num_return_sequences=1
+            # batch_size=1
 
-    pipeline = transformers.pipeline(
-        "text-generation",
-        model=model,
-        tokenizer=tokenizer,
-        torch_dtype=torch.float16,
-        device_map="auto",
-        max_new_tokens=50,
-        do_sample=True,
-        num_return_sequences=1
-        # batch_size=1
+        )
+        pipeline.tokenizer.pad_token_id = pipeline.model.config.eos_token_id
 
-    )
-    pipeline.tokenizer.pad_token_id = pipeline.model.config.eos_token_id
+        texts = []
+        index_dict = []
+        for key, value in answer_data.items():
+            texts += value['Answer Prediction Prompt Dataset']
+            for each_instance_idx in range(len(value['Instances'])):
+                index_dict.append((key, each_instance_idx))
 
-    texts = []
-    index_dict = []
-    for key, value in answer_data.items():
-        texts += value['Answer Prediction Prompt Dataset']
-        for each_instance_idx in range(len(value['Instances'])):
-            index_dict.append((key, each_instance_idx))
+            assert len(value['Answer Prediction Prompt Dataset']
+                    ) == len(value['Instances'])
 
-        assert len(value['Answer Prediction Prompt Dataset']
-                   ) == len(value['Instances'])
+        result = []
 
-    result = []
+        for each in tqdm.tqdm(texts):
 
-    for each in tqdm.tqdm(texts):
+            truncated_result = "answer_fake"
+            if not debug:
+                res = pipeline(each)
+                output_text = res[0]['generated_text'][len(each):]
+                truncated_result = output_text.strip()
+            # result.append(truncated_result)
+            # print(result)
+            result.append(truncated_result)
 
-        truncated_result = "answer_fake"
-        if not debug:
-            res = pipeline(each)
-            output_text = res[0]['generated_text'][len(each):]
-            truncated_result = output_text.strip()
-        # result.append(truncated_result)
-        # print(result)
-        result.append(truncated_result)
+        for i, text in enumerate(texts):
+            task, index = index_dict[i]
+            # Write answer prediction to json file.
+            answer_data[task]["Instances"][index]['answer_prediction'] = result[i]
 
-    for i, text in enumerate(texts):
-        task, index = index_dict[i]
-        # Write answer prediction to json file.
-        answer_data[task]["Instances"][index]['answer_prediction'] = result[i]
+        del pipeline, result,texts,index_dict
+        
 
-    del pipeline
 
     return answer_data
 
@@ -148,82 +152,76 @@ def feedback_inference(model,
                        contamination,
                        debug):
 
-    n_gpus = torch.cuda.device_count()
-    max_memory = {}
-    if n_gpus >= 2:
+    with ClearCache():
+        pipeline = transformers.pipeline(
+            "text-generation",
+            model=model,
+            tokenizer=tokenizer,
+            torch_dtype=torch.float16,
+            device_map="auto",
+            max_new_tokens=100,
+            do_sample=True,
+            num_return_sequences=num_return_seq
 
-        max_memory[0] = "3GIB"
-        max_memory[1] = "16GIB"
-    else:
-        max_memory[0] = "16GIB"
-    pipeline = transformers.pipeline(
-        "text-generation",
-        model=model,
-        tokenizer=tokenizer,
-        torch_dtype=torch.float16,
-        device_map="sequential",
-        # max_memory=max_memory,
-        max_new_tokens=100,
-        do_sample=True,
-        num_return_sequences=num_return_seq
+        )
+        pipeline.tokenizer.pad_token_id = pipeline.model.config.eos_token_id
 
-    )
-    pipeline.tokenizer.pad_token_id = pipeline.model.config.eos_token_id
-
-    result = []
-    prompt_example_dict = {}
-    log_counter=0
-    major_voting_log = []
+        result = []
+        prompt_example_dict = {}
+        log_counter=0
+        major_voting_log = []
 
 
-    feedback_data = feedback_prompt_data
-    for task_name in tqdm.tqdm(list(feedback_data.keys()), desc="Each task fb generation:", position=0):
-        if ".json" in task_name:
-            task_dict = feedback_data[task_name]
-            selected_example_index_list = new_example_indices_dict[task_name]
-            index = 0
-            prompt_example_list = []
+        feedback_data = feedback_prompt_data
+        for task_name in tqdm.tqdm(list(feedback_data.keys()), desc="Each task fb generation:", position=0):
+            if ".json" in task_name:
+                task_dict = feedback_data[task_name]
+                selected_example_index_list = new_example_indices_dict[task_name]
+                index = 0
+                prompt_example_list = []
 
-            for each_feedback_prompt in task_dict["Feedback Prediction Prompt Dataset"]:
-                # reason = f"fake feedback"#pipeline(each)
-                truncated_result = "feedback_fake"
-                if not debug:
-                    res = pipeline(each_feedback_prompt)
-                    truncated_result = [res[i]['generated_text'][len(each_feedback_prompt):].split(
-                        '\n\n')[0].strip() for i in range(len(res))]
+                for each_feedback_prompt in task_dict["Feedback Prediction Prompt Dataset"]:
+                    # reason = f"fake feedback"#pipeline(each)
+                    truncated_result = "feedback_fake"
+                    if not debug:
+                        res = pipeline(each_feedback_prompt)
+                        truncated_result = [res[i]['generated_text'][len(each_feedback_prompt):].split(
+                            '\n\n')[0].strip() for i in range(len(res))]
 
 
-                    if len(truncated_result) == 1:
-                        result.append(truncated_result[0])
-                        voted_feedback= truncated_result
-                        
-                    else: 
-                        voted_feedback, outliers, response_vectors_2d, cluster_center, data_center,pure_vector2d = major_vote_response(
-                            bert_model, bert_tokenizer, truncated_result, contamination=contamination, batch_size=num_return_seq)
-                        result.append(voted_feedback)
-                        if log_counter<20:
-                            tmp = {"each_feedback_prompt":each_feedback_prompt,
-                                    "truncated_result":truncated_result,
-                                    "outliers":outliers.tolist(),
-                                    "response_vectors_2d":response_vectors_2d.tolist(), 
-                                    "cluster_center":cluster_center.tolist(),
-                                    "data_center":data_center.tolist(),
-                                    "pure_vector2d":pure_vector2d.tolist()}
-                            major_voting_log.append(tmp)
-                            log_counter+=1
-                # result.append(truncated_result)
+                        if len(truncated_result) == 1:
+                            result.append(truncated_result[0])
+                            voted_feedback= truncated_result
+                            
+                        else: 
+                            voted_feedback, outliers, response_vectors_2d, cluster_center, data_center,pure_vector2d = major_vote_response(
+                                bert_model, bert_tokenizer, truncated_result, contamination=contamination, batch_size=num_return_seq)
+                            result.append(voted_feedback)
+                            if log_counter<20:
+                                tmp = {"each_feedback_prompt":each_feedback_prompt,
+                                        "truncated_result":truncated_result,
+                                        "outliers":outliers.tolist(),
+                                        "response_vectors_2d":response_vectors_2d.tolist(), 
+                                        "cluster_center":cluster_center.tolist(),
+                                        "data_center":data_center.tolist(),
+                                        "pure_vector2d":pure_vector2d.tolist()}
+                                major_voting_log.append(tmp)
+                                log_counter+=1
+                    # result.append(truncated_result)
 
-                if index in selected_example_index_list:
-                    prompt_example_list.append({"input": task_dict['Instances'][index]["input"],
-                                                "output": task_dict['Instances'][index]["answer_prediction"],
-                                                "reason": voted_feedback})
-                
+                    if index in selected_example_index_list:
+                        prompt_example_list.append({"input": task_dict['Instances'][index]["input"],
+                                                    "output": task_dict['Instances'][index]["answer_prediction"],
+                                                    "reason": voted_feedback})
+                    
 
-                index += 1
+                    index += 1
 
-            prompt_example_dict[task_name] = prompt_example_list
+                prompt_example_dict[task_name] = prompt_example_list
 
-    feedback_data["Feedback Label"] = result
+        feedback_data["Feedback Label"] = result
 
-    del pipeline
+        del pipeline
+        
+
     return feedback_data, prompt_example_dict,major_voting_log

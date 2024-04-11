@@ -31,7 +31,7 @@ from torch.utils.data import Dataset, DataLoader
         # }
 
 base_root = "/home/qianxi/scratch/laffi/datasets/natural_instruction_v1/eval"
-limit = 20
+limit = 60
 input_list = []
 label_list = []
 for each_file in os.listdir(base_root):
@@ -42,7 +42,11 @@ for each_file in os.listdir(base_root):
 
         instruction = f"""### Instruction:\n{content["Definition"]} {content["Emphasis & Caution"]}\n\n"""
         question = f"""### Answer:\n"""
-        for i in range(limit):
+        per_task_limit = limit
+        if len(content["Instances"]) < per_task_limit:
+            per_task_limit = len(content["Instances"])
+
+        for i in range(per_task_limit):
             task = f"""### Task:\n{content["Instances"][i]["input"]}\n\n"""
             full_prompt = f"""{instruction}{task}{question}"""
 
@@ -57,5 +61,5 @@ for each_file in os.listdir(base_root):
 
 print(len(input_list))
 print(len(label_list))
-with open("/home/qianxi/scratch/laffi/datasets/natural_instruction_v1/natural_ins_eval.json",'w') as obj:
+with open("/home/qianxi/scratch/laffi/datasets/natural_instruction_v1/natural_ins_eval_60.json",'w') as obj:
     obj.write(json.dumps({"input":input_list,"label":label_list})) 

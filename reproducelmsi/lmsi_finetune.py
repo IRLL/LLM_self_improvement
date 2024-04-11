@@ -23,7 +23,9 @@ from utils import log_method
 
 @log_method
 def finetune(model, tokenizer, result_save_path, answer_dataset, iter_version):
+    torch.cuda.empty_cache()
     model.train()
+    model.config.use_cache = False
     rouge = ROUGEScore()
 
     deepspeed_config_path = None
@@ -59,7 +61,7 @@ def finetune(model, tokenizer, result_save_path, answer_dataset, iter_version):
                 bias="none",
                 task_type="CAUSAL_LM")
 
-    model.config.use_cache = False
+    #model.config.use_cache = True
     model.config.pretraining_tp = 1
     model = get_peft_model(model, lora_config)
     model.print_trainable_parameters()
@@ -68,10 +70,12 @@ def finetune(model, tokenizer, result_save_path, answer_dataset, iter_version):
     training_params = TrainingArguments(
         output_dir=result_save_path,
         num_train_epochs=3,
-        per_device_train_batch_size=2,
+        per_device_train_batch_size=1,
+        per_device_eval_batch_size=2,
+        do_train=True,
         gradient_accumulation_steps=1,
         logging_steps=25,
-        learning_rate=2e-4,
+        learning_rate=5e-5,
         weight_decay=0.001,
         fp16=True,
         bf16=False,
@@ -83,7 +87,7 @@ def finetune(model, tokenizer, result_save_path, answer_dataset, iter_version):
         report_to="none",
         evaluation_strategy="epoch",
         deepspeed=deepspeed_config_path,
-        eval_accumulation_steps=4
+        eval_accumulation_steps=2
     )
     # print(os.system("nvidia-smi"))
     # Initialize the Trainer
@@ -107,7 +111,9 @@ def finetune(model, tokenizer, result_save_path, answer_dataset, iter_version):
 
     # Start training
     trainer.train()
-    model.save_pretrained(result_save_path)
+    model_save_path = os.path.join(result_save_path, "model")
+    model.save_pretrained(model_save_path)
+    tokenizer.save_pretrained(model_save_path)
     model = model.merge_and_unload()
 
     with open(os.path.join(result_save_path,"rouge.json"),'w') as obj:
@@ -118,5 +124,5 @@ def finetune(model, tokenizer, result_save_path, answer_dataset, iter_version):
     del finetune_dataset
     del trainer
     del nl_eval_dataset
-
+    model.config.use_cache = True
     return model, rouge_result

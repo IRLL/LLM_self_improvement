@@ -1,11 +1,11 @@
 #!/bin/bash
-#SBATCH --job-name=LMSI_13b_test_1_iter
+#SBATCH --job-name=LMSI_13b
 #SBATCH --nodes=1
 #SBATCH --gpus-per-node=2 
 #SBATCH --ntasks-per-node=2
 #SBATCH --mem=32G
 #SBATCH --cpus-per-task=1
-#SBATCH --time=30:00:00
+#SBATCH --time=50:00:00
 #SBATCH --export=ALL,DISABLE_DCGM=1
 #SBATCH --account=rrg-mtaylor3
 #SBATCH --output=/home/qianxi/scratch/laffi/slurm/%A.out
@@ -19,12 +19,16 @@ cd /home/qianxi/scratch/laffi/code/reproducelmsi;
 wandb offline;
 export WANDB_API_KEY=b363daac0bf911130cb2eff814388eaf99942a0b;
 
+
 CUDA_VISIBLE_DEVICES=0,1 python /home/qianxi/scratch/laffi/code/reproducelmsi/lmsi.py \
                                 --base_dataset_path="/home/qianxi/scratch/laffi/datasets/natural_instruction_v1/train" \
                                 --enable_boolq_eval=1 \
                                 --enable_squad_eval=1 \
-                                --per_task_data_rows=100 \
-                                --experiment_name="13b_exp" \
+                                --enable_gsm8k_eval=1 \
+                                --per_task_data_rows=50 \
+                                --num_return_seq=1 \
+                                --experiment_name="reproduce_lmsi" \
                                 --model_path="/home/qianxi/scratch/laffi/models/13b" \
+                                --wandb_enabled=0 \
                                 --experiment_root_path="/home/qianxi/scratch/laffi/code/reproducelmsi/results/13b" \
-                                --iteration_amount=1 2>&1 | tee /home/qianxi/scratch/laffi/code/logs/program_logs/13b_official_2gpu_lmsi_apr1.log
+                                --iteration_amount=5

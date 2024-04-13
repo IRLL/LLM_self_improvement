@@ -34,7 +34,7 @@ class FinetuneDataset(Dataset):
 
 
 class NIevalDataset(Dataset):
-    def __init__(self, tokenizer, filename="/home/qianxi/scratch/laffi/datasets/natural_instruction_v1/natural_ins_eval.json", max_length=256):
+    def __init__(self, tokenizer, filename, max_length=256):
         self.tokenizer = tokenizer
         self.inputs = []
         self.targets = []

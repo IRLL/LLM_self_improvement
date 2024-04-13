@@ -5,9 +5,9 @@ from sklearn.cluster import KMeans
 import numpy as np
 from tqdm import tqdm
 import matplotlib.pyplot as plt
-import os
+import os,sys
 
-from utils import log_method
+from utils import log_method,load_bert,read_json,write_json,ClearCache
 
 
 def batch_encode_strings(bert, tokenizer, strings, batch_size=16):
@@ -24,8 +24,8 @@ def batch_encode_strings(bert, tokenizer, strings, batch_size=16):
         inputs = tokenizer(batch, padding=True, truncation=True, return_tensors="pt", max_length=512)
 
         # Move tensors to the device where the model is located
-        input_ids = inputs['input_ids'].to("cuda:1")
-        attention_mask = inputs['attention_mask'].to("cuda:1")
+        input_ids = inputs['input_ids'].to("cuda:0")
+        attention_mask = inputs['attention_mask'].to("cuda:0")
 
         # Get hidden states
         with torch.no_grad():
@@ -118,25 +118,39 @@ def visualize_clustering(reduced_vectors, centers, closest_data):
 
 # visualize_clustering(reduced_vectors, centers, closest_data_indices)
 @log_method
-def get_new_examples(bert, tokenizer, experiment_root_path, answer_dataset, k, debug):
-    #experiment_root_path = f"/home/qianxi/scratch/laffi/code/results/123"
+def get_new_examples():
+    with ClearCache():
+        arguments = json.loads(sys.argv[1])
 
-    center_indices_dict = {}
-    if debug:
-        for key in answer_dataset.keys():
-            center_indices_dict[key] = [0,1]
+        debug = int(arguments['debug'])
+        experiment_root_path = arguments['experiment_root_path']
+        answer_dataset_path = arguments['answer_dataset_path']
+        k = arguments['k']
+        new_example_indices_dict_path = arguments['new_example_indices_dict_path']
 
-    else: 
-        for key in answer_dataset.keys():
-            reduced_vectors, centers, closest_data_indices = find_center_examples(bert, tokenizer, answer_dataset[key],k)
-            #TODO:make sure the path is correct.
-            task_result_path = os.path.join(experiment_root_path, "prompt_example_clustering",key.split('.json')[0])
-            os.makedirs(task_result_path)
-            torch.save(reduced_vectors,os.path.join(task_result_path,"reduced_vectors.pt"))
-            torch.save(centers,os.path.join(task_result_path,"centers.pt"))
-            torch.save(closest_data_indices,os.path.join(task_result_path,"closest_data_indices.pt"))
-            center_indices_dict[key] = closest_data_indices
+        answer_dataset = read_json(answer_dataset_path)
 
 
+        bert, tokenizer = load_bert()
+        center_indices_dict = {}
+        if debug:
+            for key in answer_dataset.keys():
+                center_indices_dict[key] = [0,1]
 
-    return center_indices_dict
+        else: 
+            for key in answer_dataset.keys():
+                reduced_vectors, centers, closest_data_indices = find_center_examples(bert, tokenizer, answer_dataset[key],k)
+                #TODO:make sure the path is correct.
+                task_result_path = os.path.join(experiment_root_path, "prompt_example_clustering",key.split('.json')[0])
+                os.makedirs(task_result_path)
+                torch.save(reduced_vectors,os.path.join(task_result_path,"reduced_vectors.pt"))
+                torch.save(centers,os.path.join(task_result_path,"centers.pt"))
+                torch.save(closest_data_indices,os.path.join(task_result_path,"closest_data_indices.pt"))
+                center_indices_dict[key] = closest_data_indices
+
+        write_json(new_example_indices_dict_path, center_indices_dict)
+
+        del bert, tokenizer, center_indices_dict
+    sys.exit()
+
+get_new_examples()

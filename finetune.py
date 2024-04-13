@@ -14,16 +14,30 @@ from transformers import (
 from trl import SFTTrainer
 from peft import LoraConfig,get_peft_model
 # from datasets import load_metric
-
+import sys
 from torchmetrics.text.rouge import ROUGEScore
 
 from dataset_helpers import FinetuneDataset, NIevalDataset
 from peft import PeftModel
-from utils import log_method,ClearCache
+from utils import log_method,ClearCache,load_tokenizer,load_model_with_adapters,read_json,write_json
 
 @log_method
-def finetune(model, tokenizer, result_save_path, feedback_dataset):
+def finetune():
+    arguments = json.loads(sys.argv[1])
+
+    iteration = int(arguments['cur_iteration'])
+    adapters_path = arguments['adapters_path']
+    result_save_path = arguments['result_save_path']
+    model_path = arguments['model_path']
+    feedback_dataset_path = arguments['feedback_dataset_path']
+    finetune_eval_data_path = arguments['finetune_eval_data_path']
+    model_adapter_save_path = arguments['model_adapter_save_path']
+
     with ClearCache():
+        tokenizer = load_tokenizer(model_path)
+        model = load_model_with_adapters(iteration, adapters_path, model_path)
+        model.train()
+
         rouge = ROUGEScore()
 
         deepspeed_config_path = None
@@ -31,9 +45,8 @@ def finetune(model, tokenizer, result_save_path, feedback_dataset):
         # Assuming your JSON data is in 'data.json', and located in the same directory as this script
 
         # Create dataset and dataloader
-        finetune_dataset = FinetuneDataset(tokenizer, filename=feedback_dataset)
-        nl_eval_dataset = NIevalDataset(tokenizer)
-
+        finetune_dataset = FinetuneDataset(tokenizer, filename=feedback_dataset_path)
+        nl_eval_dataset = NIevalDataset(tokenizer,finetune_eval_data_path)
         def compute_metrics(eval_pred):
             predictions, labels = eval_pred
             np_array = torch.as_tensor(predictions)
@@ -66,8 +79,8 @@ def finetune(model, tokenizer, result_save_path, feedback_dataset):
 
         # Training settings
         training_params = TrainingArguments(
+            num_train_epochs=3,
             output_dir=result_save_path,
-            num_train_epochs=1,
             do_train=True,
             per_device_train_batch_size=1,
             gradient_accumulation_steps=1,
@@ -106,10 +119,9 @@ def finetune(model, tokenizer, result_save_path, feedback_dataset):
 
         # Start training
         trainer.train()
-        model_save_path = os.path.join(result_save_path, "model")
-        model.save_pretrained(model_save_path)
-        tokenizer.save_pretrained(model_save_path)
-        model = model.merge_and_unload()
+        model.save_pretrained(model_adapter_save_path)
+
+        # model = model.merge_and_unload()
 
 
         with open(os.path.join(result_save_path,"rouge.json"),'w') as obj:
@@ -121,6 +133,4 @@ def finetune(model, tokenizer, result_save_path, feedback_dataset):
         del trainer
         del nl_eval_dataset
         del training_params
-
-
-    return model, rouge_result
+finetune()

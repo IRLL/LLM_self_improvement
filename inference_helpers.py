@@ -35,8 +35,8 @@ def major_vote_response(model, tokenizer, responses, contamination, batch_size):
                                return_tensors="pt", max_length=512)
 
             # Move tensors to the device where the model is located
-            input_ids = inputs['input_ids'].to("cuda:1")
-            attention_mask = inputs['attention_mask'].to("cuda:1")
+            input_ids = inputs['input_ids'].to("cuda:0")
+            attention_mask = inputs['attention_mask'].to("cuda:0")
 
             # Get hidden states
             with torch.no_grad():
@@ -90,58 +90,6 @@ def major_vote_response(model, tokenizer, responses, contamination, batch_size):
 
 
 @log_method
-def answer_inference(model, tokenizer, answer_data, debug):
-    with ClearCache():
-        pipeline = transformers.pipeline(
-            "text-generation",
-            model=model,
-            tokenizer=tokenizer,
-            torch_dtype=torch.float16,
-            device_map="auto",
-            max_new_tokens=50,
-            do_sample=True,
-            num_return_sequences=1
-            # batch_size=1
-
-        )
-        pipeline.tokenizer.pad_token_id = pipeline.model.config.eos_token_id
-
-        texts = []
-        index_dict = []
-        for key, value in answer_data.items():
-            texts += value['Answer Prediction Prompt Dataset']
-            for each_instance_idx in range(len(value['Instances'])):
-                index_dict.append((key, each_instance_idx))
-
-            assert len(value['Answer Prediction Prompt Dataset']
-                    ) == len(value['Instances'])
-
-        result = []
-
-        for each in tqdm.tqdm(texts):
-
-            truncated_result = "answer_fake"
-            if not debug:
-                res = pipeline(each)
-                output_text = res[0]['generated_text'][len(each):]
-                truncated_result = output_text.strip()
-            # result.append(truncated_result)
-            # print(result)
-            result.append(truncated_result)
-
-        for i, text in enumerate(texts):
-            task, index = index_dict[i]
-            # Write answer prediction to json file.
-            answer_data[task]["Instances"][index]['answer_prediction'] = result[i]
-
-        del pipeline, result,texts,index_dict
-        
-
-
-    return answer_data
-
-
-@log_method
 def feedback_inference(model,
                        tokenizer,
                        feedback_prompt_data,
@@ -157,9 +105,8 @@ def feedback_inference(model,
             "text-generation",
             model=model,
             tokenizer=tokenizer,
-            torch_dtype=torch.float16,
             device_map="auto",
-            max_new_tokens=100,
+            max_new_tokens=80,
             do_sample=True,
             num_return_sequences=num_return_seq
 

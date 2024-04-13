@@ -11,3 +11,4 @@ wandb/*
 reproducelmsi/wandb/*
 *.png
 *.txt
+test_load_model/*

@@ -8,14 +8,14 @@ import sys
 from utils import log_method,ClearCache,load_tokenizer,load_model_with_adapters, read_json, write_json,split_into_batches
 
 def inference(model, tokenizer, batch_input_text):
-    input_ids = tokenizer(batch_input_text, return_tensors="pt", max_length=2048, padding=True, truncation=True).to('cuda:0')
+    input_ids = tokenizer(batch_input_text, return_tensors="pt", padding=True, truncation=True).to('cuda:0')
     with torch.no_grad():
         outputs = model.generate(
             input_ids=input_ids['input_ids'], 
             do_sample=True, 
             use_cache=True, 
             num_return_sequences=1,
-            max_new_tokens=50,
+            max_new_tokens=100,
             attention_mask=input_ids['attention_mask'] ,
             pad_token_id=tokenizer.pad_token_id
         )

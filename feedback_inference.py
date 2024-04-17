@@ -91,7 +91,7 @@ def major_vote_response(model, tokenizer, responses, contamination, batch_size):
 
 
 def inference(model, tokenizer, batch_input_text,num_return_sequences):
-    input_ids = tokenizer(batch_input_text, return_tensors="pt", max_length=2048, padding=True, truncation=True).to('cuda:0')
+    input_ids = tokenizer(batch_input_text, return_tensors="pt", padding=True, truncation=True).to('cuda:0')
     with torch.no_grad():
         generated_texts = [[] for _ in range(len(batch_input_text))]
         for gen_iter in range(num_return_sequences):
@@ -101,7 +101,7 @@ def inference(model, tokenizer, batch_input_text,num_return_sequences):
                 do_sample=True, 
                 use_cache=True, 
                 num_return_sequences=1,
-                max_new_tokens=100,
+                max_new_tokens=200,
                 attention_mask=input_ids['attention_mask'] ,
                 pad_token_id=tokenizer.pad_token_id
             )

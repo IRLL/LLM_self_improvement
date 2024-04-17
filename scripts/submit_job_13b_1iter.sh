@@ -7,7 +7,7 @@
 #SBATCH --cpus-per-task=2
 #SBATCH --time=30:00:00
 #SBATCH --account=rrg-mtaylor3
-#SBATCH --output=/home/qianxi/scratch/laffi/slurm/%A.out
+#SBATCH --output=/home/qianxi/scratch/laffi/slurm/official_exp/13b/%A.out
 #SBATCH --mail-user=qianxi@ualberta.ca
 #SBATCH --mail-type=ALL
 

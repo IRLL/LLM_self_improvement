@@ -114,4 +114,4 @@ def eval_squad():
 
         print(f"squad result for iter {iteration}",squad_result)
 
-    
+eval_squad()

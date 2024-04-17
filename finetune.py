@@ -65,10 +65,11 @@ def finetune():
             return {"rouge_score": rouge_score}
 
         target_modules = ['q_proj','k_proj','v_proj','o_proj','gate_proj','down_proj','up_proj']#,'lm_head']
-        lora_config = LoraConfig(r=16,
+        lora_config = LoraConfig(r=32,
                     target_modules = target_modules,
                     lora_alpha=8,
                     lora_dropout=0.05,
+                    inference_mode=False,
                     bias="none",
                     task_type="CAUSAL_LM")
 
@@ -79,27 +80,28 @@ def finetune():
 
         # Training settings
         training_params = TrainingArguments(
-            num_train_epochs=3,
+            num_train_epochs=5,
             output_dir=result_save_path,
             do_train=True,
             per_device_train_batch_size=1,
             gradient_accumulation_steps=1,
             logging_steps=25,
-            learning_rate=1e-4,
+            learning_rate=1e-3,
             weight_decay=0.001,
             per_device_eval_batch_size=2,
             fp16=True,
             bf16=False,
-            max_grad_norm=0.3,
+            max_grad_norm=1,
             max_steps=-1,
-            warmup_ratio=0.03,
             group_by_length=True,
             lr_scheduler_type="constant",
             report_to="none",
             logging_dir=os.path.join(result_save_path,'loss_logs'),
             evaluation_strategy="epoch",
             deepspeed=deepspeed_config_path,
-            eval_accumulation_steps=2
+            eval_accumulation_steps=2,
+            save_strategy="epoch",
+            load_best_model_at_end=True,
         )
         # print(os.system("nvidia-smi"))
         # Initialize the Trainer

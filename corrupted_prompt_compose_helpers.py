@@ -3,7 +3,7 @@ import os
 import copy
 
 
-def construct_answer_prompts(base_dataset_path,
+def construct_answer_prompts_corrupted(base_dataset_path,
                              per_task_data_row_amount,
                              example_source,
                              prompt_example_dict,
@@ -32,8 +32,9 @@ def construct_answer_prompts(base_dataset_path,
             if pos_example_amount:
                 pos_example = task_examples["Positive Examples"][:pos_example_amount]
                 examples += pos_example
-                for each_example in pos_example:
-                    prompt += f"""### Task:\n{each_example["input"]}\n\n### Answer:\n{each_example["output"]}\n\n"""
+                for idx, each_example in enumerate(pos_example):
+                    # Corrupt the examples.
+                    prompt += f"""### Task:\n{pos_example[len(pos_example)-1-idx]["input"]}\n\n### Answer:\n{each_example["output"]}\n\n"""
 
             if negative_example_amount:
                 neg_example = task_examples["Negative Examples"][:negative_example_amount]
@@ -86,9 +87,7 @@ def construct_answer_prompts(base_dataset_path,
             # Compose instruction.
             instruction = f"""{task_definition} {caution}\n\n"""
 
-            context = f"""Please refer to the instruction and task information and give your answers."""
-            if pos_example_amount or neg_example_amount:
-                context +=  "You need to follow the examples we provided."
+            context = f"""Please refer to the instruction and task information and give your answers. You need to follow the examples we provided."""
 
             example_str = ""
             if pos_example_amount or neg_example_amount:
@@ -110,7 +109,7 @@ def construct_answer_prompts(base_dataset_path,
     return dataset_dict, current_examples_dict
 
 
-def construct_feedback_prompts(loaded_examples,
+def construct_feedback_prompts_corrupted(loaded_examples,
                                answer_pred_dataset):
     """
 The goal of this function is to compose the prompts for feedback generation.
@@ -125,8 +124,9 @@ for each task:
 """
     def compose_feedback_examples(examples):
         prompt = ""
-        for each_example in examples:
-            single_prompt = f"""### Task:\n{each_example["input"]}\n\n### Predicted Answer:\n{each_example["output"]}\n\n###Feedback:\n{each_example["reason"]}. So the answer should be {each_example["output"]}\n\n"""
+        for idx, each_example in enumerate(examples):
+            corrupt_one = examples[len(examples)-1-idx]
+            single_prompt = f"""### Task:\n{corrupt_one["input"]}\n\n### Predicted Answer:\n{each_example["output"]}\n\n###Feedback:\n{each_example["reason"]}. So the answer should be {each_example["output"]}\n\n"""
             prompt += single_prompt
 
         return prompt
@@ -149,10 +149,10 @@ for each task:
             # Compose examples prompt.
             example_prompt = compose_feedback_examples(loaded_examples[task_name])
 
-        feedback_prompt = """Please refer to the instruction and task information, provide your feedback for whether the predict answer is proper, the reasons and what the correct answer is. You need to follow the examples we provided."""
+        feedback_prompt = """Please refer to the instruction and task information, provide your feedback for whether you think the predict answer is proper and the reasons. You need to follow the examples we provided."""
         context = f"""{feedback_prompt}\n\n### Instruction:\n{task_definition} {caution} \n\n"""
 
-        feedback_input_no_examples = """Please refer to the instruction and task information, provide your feedback for whether the predict answer is proper, the reasons and what the correct answer is."""
+        feedback_input_no_examples = """Please refer to the instruction and task information, provide your feedback for whether you think the predict answer is proper and the reasons."""
         no_example_context = f"""{feedback_input_no_examples}\n\n### Instruction:\n{task_definition} {caution} \n\n"""
 
         # Compose full_prompt for each instance.

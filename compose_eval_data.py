@@ -31,7 +31,7 @@ from torch.utils.data import Dataset, DataLoader
         # }
 
 base_root = "/home/qianxi/scratch/laffi/datasets/natural_instruction_v1/eval"
-limit = 60
+limit = 300
 input_list = []
 label_list = []
 for each_file in os.listdir(base_root):
@@ -61,5 +61,5 @@ for each_file in os.listdir(base_root):
 
 print(len(input_list))
 print(len(label_list))
-with open("/home/qianxi/scratch/laffi/datasets/natural_instruction_v1/natural_ins_eval_60.json",'w') as obj:
+with open("/home/qianxi/scratch/laffi/datasets/natural_instruction_v1/natural_ins_eval_official.json",'w') as obj:
     obj.write(json.dumps({"input":input_list,"label":label_list})) 

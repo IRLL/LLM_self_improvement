@@ -6,8 +6,11 @@ import tqdm
 import json
 import sys
 from utils import log_method,ClearCache,load_tokenizer,load_model_with_adapters, read_json, write_json,split_into_batches
+from transformers import StoppingCriteria,StoppingCriteriaList
+from torch import LongTensor, FloatTensor
 
-def inference(model, tokenizer, batch_input_text):
+
+def inference(model, tokenizer, batch_input_text,stopping_criteria):
     input_ids = tokenizer(batch_input_text, return_tensors="pt", padding=True, truncation=True).to('cuda:0')
     with torch.no_grad():
         outputs = model.generate(
@@ -16,11 +19,13 @@ def inference(model, tokenizer, batch_input_text):
             use_cache=True, 
             num_return_sequences=1,
             max_new_tokens=100,
+            temperature=0.3,
             attention_mask=input_ids['attention_mask'] ,
-            pad_token_id=tokenizer.pad_token_id
+            pad_token_id=tokenizer.pad_token_id,
+            stopping_criteria=stopping_criteria
         )
     #generated_texts = [tokenizer.decode(each, skip_special_tokens=True) for each in outputs]
-
+    torch.cuda.empty_cache()
     res = [tokenizer.decode(each, skip_special_tokens=True) for each in outputs]
     del input_ids
     return res
@@ -41,10 +46,21 @@ def answer_inference():
         answer_data = read_json(answer_prompts_path)
 
         tokenizer = load_tokenizer(model_path)
+        stop_list = [" \n\n", "\n\n"]
+        stop_token_ids = [tokenizer(x, return_tensors='pt', add_special_tokens=False)['input_ids'] for x in stop_list]
+        stop_token_ids = [LongTensor(x).to('cuda:0') for x in stop_token_ids]
+        class StopOnTokens(StoppingCriteria):
+            def __call__(self, input_ids: LongTensor, scores: FloatTensor, **kwargs) -> bool:
+                for stop_ids in stop_token_ids:
+                    if (input_ids[0][-len(stop_ids[0])+1:] == stop_ids[0][1:]).all():
+                        return True
+                return False
+        stopping_criteria = StoppingCriteriaList([StopOnTokens()])
         model = load_model_with_adapters(iteration, adapters_path, model_path)
         model.eval() 
 
         texts = []
+        print("texts",len(texts))
         index_dict = []
         for key, value in answer_data.items():
             texts += value['Answer Prediction Prompt Dataset']
@@ -59,7 +75,7 @@ def answer_inference():
         for each_batch in tqdm.tqdm(batches):
 
 
-            res = inference(model, tokenizer, each_batch)
+            res = inference(model, tokenizer, each_batch,stopping_criteria)
 
             for idx, each_output in enumerate(res):
                     

@@ -51,16 +51,18 @@ def parse_arguments():
     parser.add_argument('--experiment_root_path', type=str, default="/home/qianxi/scratch/laffi/code/results/",help='Root directory for storing results.')
 
     parser.add_argument('--baseline_only', type=int, default=0,help='None')
+    parser.add_argument("--enable_prompt_optimization", type=int, default=1, help="enable_prompt_optimization")
+    parser.add_argument("--enable_initial_human_examples", type=int, default=1, help="enable_human_examples")
+    parser.add_argument("--enable_mismatch_initial_human_examples", type=int, default=0, help="enable_mismatch_initial_human_examples")
 
     parser.add_argument("--model_path", type=str, default="/home/qianxi/scratch/laffi/models/7b", help="Path for the base dataset")
-    parser.add_argument("--na_ins_evalset_path", type=str, default="/home/qianxi/scratch/laffi/datasets/natural_instruction_v1/natural_ins_eval.json", help="Path for the eval dataset")
 
     
     parser.add_argument("--per_task_data_rows", type=int, default=10, help="How many training data rows to get from each task file")
     parser.add_argument("--num_return_seq", type=int, default=5, help="How many response to do major voting for the feedback.")
     parser.add_argument("--contamination", type=float, default=0.3, help="Outlier detection strength.")
 
-    parser.add_argument("--eval_inference_batch_size", type=int, default=2, help="eval abtch size")
+    parser.add_argument("--eval_inference_batch_size", type=int, default=4, help="eval abtch size")
 
 
     parser.add_argument("--clusters", type=int, default=2, help="Number of cluster centers for this task.")
@@ -71,6 +73,10 @@ def parse_arguments():
     parser.add_argument("--current_examples_path", type=str, default=None, help="Path for the base dataset")
     parser.add_argument("--adapter_path", type=str, default=None, help="Adapter path")
 
+    # Natural Instruction related arguments
+    parser.add_argument("--enable_natural_ins", type=int, default=1, help="If true, enable natural instruction evaluation")
+    parser.add_argument("--na_ins_evalset_path", type=str, default="/home/qianxi/scratch/laffi/datasets/natural_instruction_v1/converted/natural_ins_eval_official_converted.json", help="Path for the eval dataset")
+
     # BoolQ related arguments
     parser.add_argument("--enable_boolq_eval", type=int, default=0, help="If true, enable boolq evaluation")
     parser.add_argument("--boolq_eval_path", type=str, default="/home/qianxi/scratch/laffi/datasets/boolq/eval_boolq.json", help="Boolq eval set path")
@@ -78,8 +84,8 @@ def parse_arguments():
 
     # Squad related arguments
     parser.add_argument("--enable_squad_eval", type=int, default=0, help="If true, enable squad evaluation")
-    parser.add_argument("--transformed_squad_eval_set_path", type=str, default="/home/qianxi/scratch/laffi/datasets/squad2/truncated_processed_eval_dataset.json", help="Trans SQuAD eval set path")
-    parser.add_argument("--original_squad_eval_set_path", type=str, default="/home/qianxi/scratch/laffi/datasets/squad2/truncated_squal_eval.json", help="Original SQuAD eval set path")
+    parser.add_argument("--transformed_squad_eval_set_path", type=str, default="/home/qianxi/scratch/laffi/datasets/squad2/processed_eval_dataset.json", help="Trans SQuAD eval set path")
+    parser.add_argument("--original_squad_eval_set_path", type=str, default="/home/qianxi/scratch/laffi/datasets/squad2/squad_official_eval.json", help="Original SQuAD eval set path")
     parser.add_argument("--squad_response_gen_file", type=str, default=None, help="squad_response_gen_file")
     parser.add_argument("--squad_eval_result_path", type=str, default=None, help="squad_eval_result_path")
 

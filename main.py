@@ -9,7 +9,7 @@ from datetime import datetime
 from utils import parse_arguments,read_json,write_json
 
 from prompt_compose_helpers import construct_answer_prompts, construct_feedback_prompts
-
+from corrupted_prompt_compose_helpers import construct_answer_prompts_corrupted, construct_feedback_prompts_corrupted
 import warnings
 
 logging.basicConfig(level=logging.INFO,
@@ -78,22 +78,45 @@ def main():
     # Start from scratch, use human examples to create
     # answer generation prompts.
     if iteration_version == 0:
-        answer_prompt_dataset, prompt_example_dict = construct_answer_prompts(args.base_dataset_path,
+        pos_example = None
+        neg_example = None
+        if args.enable_initial_human_examples:
+            pos_example = args.pos_example_amount
+            neg_example = args.neg_example_amount
+
+        if args.enable_mismatch_initial_human_examples:
+            answer_prompt_dataset, prompt_example_dict = construct_answer_prompts_corrupted(args.base_dataset_path,
+                                                                                            args.per_task_data_rows,
+                                                                                            "human",
+                                                                                            prompt_example_dict,
+                                                                                            pos_example,
+                                                                                            neg_example)         
+
+        else: 
+            answer_prompt_dataset, prompt_example_dict = construct_answer_prompts(args.base_dataset_path,
+                                                                                    args.per_task_data_rows,
+                                                                                    "human",
+                                                                                    prompt_example_dict,
+                                                                                    pos_example,
+                                                                                    neg_example)
+        if args.enable_initial_human_examples:
+            with open(os.path.join(cur_iter_root_path, "initial_prompt_examples.json"), 'w') as obj:
+                obj.write(json.dumps(prompt_example_dict))
+    else:
+        if args.enable_prompt_optimization:
+            previous_example_dict_path = os.path.join(experiment_root_path, str(iteration_version-1), "prompt_examples.json")
+            prompt_example_dict = read_json(previous_example_dict_path)
+            answer_prompt_dataset, prompt_example_dict = construct_answer_prompts(args.base_dataset_path,
+                                                                                    args.per_task_data_rows,
+                                                                                    "llm",
+                                                                                    prompt_example_dict)
+        else: 
+            answer_prompt_dataset, prompt_example_dict = construct_answer_prompts(args.base_dataset_path,
                                                                                 args.per_task_data_rows,
                                                                                 "human",
                                                                                 prompt_example_dict,
                                                                                 args.pos_example_amount,
                                                                                 args.neg_example_amount)
-
-        with open(os.path.join(cur_iter_root_path, "initial_prompt_examples.json"), 'w') as obj:
-            obj.write(json.dumps(prompt_example_dict))
-    else:
-        previous_example_dict_path = os.path.join(experiment_root_path, str(iteration_version-1), "prompt_examples.json")
-        prompt_example_dict = read_json(previous_example_dict_path)
-        answer_prompt_dataset, prompt_example_dict = construct_answer_prompts(args.base_dataset_path,
-                                                                                args.per_task_data_rows,
-                                                                                "llm",
-                                                                                prompt_example_dict)
 
     answer_prompt_dataset_path = os.path.join(cur_iter_root_path,"answer_prompts.json")
     answer_dataset_path = os.path.join(cur_iter_root_path,"answer_dataset.json")
@@ -109,28 +132,20 @@ def main():
                                   "answer_prompts_path":answer_prompt_dataset_path,
                                   "answer_dataset_path":answer_dataset_path}
 
+    str1 = f"CUDA_VISIBLE_DEVICES={device_str} python answer_inference.py '{json.dumps(answer_inference_args_json)}'"
     # Use answer prompts to generate dataset.
-    exit_code = os.system(f"CUDA_VISIBLE_DEVICES={device_str} python answer_inference.py '{json.dumps(answer_inference_args_json)}'")
+    exit_code = os.system(str1)
     if exit_code != 0:
         print(f"answer inference failed with exit code {exit_code}")
-        sys.exit(1)  # Exit the program with an error status
-
-    # Use clustering algorithm to get new examples.
-    example_clustering_args_json = {"debug":debug,
-                                  "experiment_root_path":cur_iter_root_path,
-                                  "k":args.clusters,
-                                  "new_example_indices_dict_path":new_example_indices_dict_path,
-                                  "answer_dataset_path":answer_dataset_path}
-
-    exit_code = os.system(f"CUDA_VISIBLE_DEVICES={device_str} python example_clustering.py '{json.dumps(example_clustering_args_json)}'")
-    if exit_code != 0:
-        print(f"example clustering failed with exit code {exit_code}")
         sys.exit(1)  # Exit the program with an error status
 
     answer_dataset = read_json(answer_dataset_path)
     # Feedback generation prompts.
     # No model deploy required in this method.
-    feedback_prompt_data = construct_feedback_prompts(prompt_example_dict, answer_dataset)
+    if args.enable_mismatch_initial_human_examples:
+        feedback_prompt_data = construct_feedback_prompts_corrupted(prompt_example_dict, answer_dataset)
+    else: 
+        feedback_prompt_data = construct_feedback_prompts(prompt_example_dict, answer_dataset)
 
     with open(feedback_prompt_dataset_path, "w") as obj:
         obj.write(json.dumps(feedback_prompt_data))
@@ -142,17 +157,27 @@ def main():
                                     "contamination":args.contamination,
                                     "adapters_path":adapters_path,
                                     "model_path":args.model_path,
-                                    "inference_batch_size":args.eval_inference_batch_size,
+                                    "inference_batch_size":1,
                                     "feedback_prompts_path":feedback_prompt_dataset_path,
                                     "feedback_dataset_path":feedback_dataset_path,
-                                    "current_prompt_examples_path":prompt_example_dict_path,
-                                    "major_voting_save_path":fb_major_voting_path,
-                                    "new_example_indices_dict_path":new_example_indices_dict_path}
-
+                                    "major_voting_save_path":fb_major_voting_path}
+    
     exit_code = os.system(f"CUDA_VISIBLE_DEVICES={device_str} python feedback_inference.py '{json.dumps(feedback_inference_args_json)}'")
     if exit_code != 0:
         print(f"feedback inference failed with exit code {exit_code}")
         sys.exit(1)  # Exit the program with an error status
+
+    if args.enable_prompt_optimization:
+        # Use clustering algorithm to get new examples.
+        example_clustering_args_json = {
+                                    "experiment_root_path":cur_iter_root_path,
+                                    "k":args.clusters,
+                                    "prompt_example_dict_path":prompt_example_dict_path,
+                                    "feedback_dataset_path":feedback_dataset_path}
+        exit_code = os.system(f"CUDA_VISIBLE_DEVICES={device_str} python example_clustering.py '{json.dumps(example_clustering_args_json)}'")
+        if exit_code != 0:
+            print(f"example clustering failed with exit code {exit_code}")
+            sys.exit(1)  # Exit the program with an error status
 
     finetune_arguments_json = {"cur_iteration":args.cur_iteration,
                                "adapters_path":adapters_path,
@@ -166,7 +191,20 @@ def main():
         print(f"finetune failed with exit code {exit_code}")
         sys.exit(1)  # Exit the program with an error status
 
+
     # evaluation section.
+    if args.enable_natural_ins:
+        natural_args_json = {"cur_iteration":args.cur_iteration,
+                            "adapters_path":adapters_path,
+                            "model_path":args.model_path,
+                            "natural_ins_eval_result_path":os.path.join(cur_iter_root_path, "natural_eval_result.json"),
+                            "inference_batch_size":args.eval_inference_batch_size,
+                            "natural_ins_eval_path":args.na_ins_evalset_path }
+        exit_code = os.system(f"CUDA_VISIBLE_DEVICES={device_str} python eval_natural_ins.py '{json.dumps(natural_args_json)}'")
+        if exit_code != 0:
+            print(f"natural ins eval failed with exit code {exit_code}")
+            sys.exit(1)  # Exit the program with an error status
+
     if args.enable_boolq_eval:
         boolq_args_json = {"cur_iteration":args.cur_iteration,
                             "adapters_path":adapters_path,

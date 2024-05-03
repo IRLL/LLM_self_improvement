@@ -43,7 +43,7 @@ def eval_gsm8k():
         with open(gsm8k_eval_path) as obj:
             gsm8k_data = json.loads(obj.read())
         
-        gsm8k_data = gsm8k_data[:1000]
+        gsm8k_data = gsm8k_data[:4000]
 
         prompt = """Write a response that appropriately completes answer the math question, follow the examples. You must end your response with "The answer is []".
         Q: If there are 3 cars in the parking lot and 2 more cars arrive, how many cars are in the parking lot?\nA: There are originally 3 cars. 2 more cars arrive. 3 + 2 = 5. The answer is 5.\n\n

@@ -64,30 +64,29 @@ def find_most_centered_data(centers, reduced_vectors):
 
 
 def find_center_examples(bert, tokenizer, task_json,k):
-
-
-    prompts = task_json["Answer Prediction Prompt Dataset"]
-    predicted_answers = [i["answer_prediction"] for i in task_json["Instances"]]
-
-    full_cluster_context_list=[]
-    for idx in range(len(predicted_answers)):
-        context = prompts[idx] + predicted_answers[idx]
-        full_cluster_context_list.append(context)
-
     # Your list of strings
-    strings = full_cluster_context_list
+    strings = task_json['Full clustering context']
     
     # Use the average of the last hidden states as vector representations
     vectors = batch_encode_strings(bert, tokenizer, strings, batch_size=16)
 
     # Dimensionality reduction with PCA
-    reduced_vectors = apply_dim_reduction(vectors, n_components=3)
+    reduced_vectors = apply_dim_reduction(vectors, n_components=2)
     centers = apply_clustering(k, reduced_vectors)
 
     # Find the closest data points to the cluster centers
     closest_data = find_most_centered_data(centers, reduced_vectors)
 
-    return reduced_vectors, centers,closest_data
+    per_task_new_example_list = []
+    for each in closest_data:
+        
+        question = task_json['Instances'][each]['input']
+        answer = task_json['Instances'][each]['answer_prediction']
+        reason = task_json['Instances'][each]['fb_pred']
+        data_dict = {"input":question,"output":answer,"reason":reason}
+        per_task_new_example_list.append(data_dict)
+
+    return reduced_vectors, centers, closest_data,per_task_new_example_list
 
 def visualize_clustering(reduced_vectors, centers, closest_data):
     # 'closest_data' now contains the indices of strings that are closest to the cluster centers
@@ -121,36 +120,33 @@ def visualize_clustering(reduced_vectors, centers, closest_data):
 def get_new_examples():
     with ClearCache():
         arguments = json.loads(sys.argv[1])
-
-        debug = int(arguments['debug'])
         experiment_root_path = arguments['experiment_root_path']
-        answer_dataset_path = arguments['answer_dataset_path']
+        fb_dataset_path = arguments['feedback_dataset_path']
         k = arguments['k']
-        new_example_indices_dict_path = arguments['new_example_indices_dict_path']
+        new_example_dict_path = arguments['prompt_example_dict_path']
 
-        answer_dataset = read_json(answer_dataset_path)
+        feedback_dataset = read_json(fb_dataset_path)
 
 
         bert, tokenizer = load_bert()
-        center_indices_dict = {}
-        if debug:
-            for key in answer_dataset.keys():
-                center_indices_dict[key] = [0,1]
 
-        else: 
-            for key in answer_dataset.keys():
-                reduced_vectors, centers, closest_data_indices = find_center_examples(bert, tokenizer, answer_dataset[key],k)
+        all_new_example_dict = {}
+
+        for key in feedback_dataset.keys():
+            if '.json' in key:
+                reduced_vectors, centers, closest_data_indices, per_task_new_example_list = find_center_examples(bert, tokenizer, feedback_dataset[key],k)
                 #TODO:make sure the path is correct.
                 task_result_path = os.path.join(experiment_root_path, "prompt_example_clustering",key.split('.json')[0])
                 os.makedirs(task_result_path)
                 torch.save(reduced_vectors,os.path.join(task_result_path,"reduced_vectors.pt"))
                 torch.save(centers,os.path.join(task_result_path,"centers.pt"))
                 torch.save(closest_data_indices,os.path.join(task_result_path,"closest_data_indices.pt"))
-                center_indices_dict[key] = closest_data_indices
 
-        write_json(new_example_indices_dict_path, center_indices_dict)
+                all_new_example_dict[key] = per_task_new_example_list
 
-        del bert, tokenizer, center_indices_dict
+        write_json(new_example_dict_path, all_new_example_dict)
+
+        del bert, tokenizer, all_new_example_dict,feedback_dataset
     sys.exit()
 
 get_new_examples()

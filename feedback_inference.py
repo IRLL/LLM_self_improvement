@@ -14,6 +14,12 @@ from sklearn.cluster import KMeans
 from sklearn.ensemble import IsolationForest
 
 from sklearn.impute import SimpleImputer
+from transformers import StoppingCriteria,StoppingCriteriaList
+from torch import LongTensor, FloatTensor
+
+
+
+
 
 def major_vote_response(model, tokenizer, responses, contamination, batch_size):
     def find_most_centered_data(center, reduced_vectors):
@@ -90,7 +96,7 @@ def major_vote_response(model, tokenizer, responses, contamination, batch_size):
     return selected, outliers, response_vectors_2d, cluster_center, data_center, pure_vectors
 
 
-def inference(model, tokenizer, batch_input_text,num_return_sequences):
+def inference(model, tokenizer, batch_input_text,num_return_sequences,stopping_criteria):
     input_ids = tokenizer(batch_input_text, return_tensors="pt", padding=True, truncation=True).to('cuda:0')
     with torch.no_grad():
         generated_texts = [[] for _ in range(len(batch_input_text))]
@@ -102,23 +108,17 @@ def inference(model, tokenizer, batch_input_text,num_return_sequences):
                 use_cache=True, 
                 num_return_sequences=1,
                 max_new_tokens=200,
+                #repetition_penalty=1.15,
                 attention_mask=input_ids['attention_mask'] ,
-                pad_token_id=tokenizer.pad_token_id
+                pad_token_id=tokenizer.pad_token_id,
+                stopping_criteria=stopping_criteria
             )
-            torch.cuda.empty_cache()
+            #torch.cuda.empty_cache()
             for idx,each_prompt_sampled_response in enumerate(outputs): 
                 decoded = tokenizer.decode(each_prompt_sampled_response, skip_special_tokens=True)
                 generated_texts[idx].append(decoded)
 
-
-
-            # for i in range(len(batch_input_text)):
-            #     # Each input's output starts at index i * num_return_sequences
-            #     start_idx = i * num_return_sequences
-            #     # Slice out the sequences for the current input
-            #     batch_generated_texts = [tokenizer.decode(outputs[j], skip_special_tokens=True) for j in range(start_idx, start_idx + num_return_sequences)]
-            #     generated_texts.append(batch_generated_texts)
-
+    torch.cuda.empty_cache()
     del input_ids, outputs
     return generated_texts
 
@@ -134,54 +134,43 @@ def feedback_inference():
     model_path = arguments['model_path']
     feedback_prompts_path = arguments['feedback_prompts_path']
     feedback_dataset_path = arguments['feedback_dataset_path']
-    current_prompt_examples_path = arguments['current_prompt_examples_path']
     major_voting_save_path = arguments['major_voting_save_path']
-    new_example_indices_dict_path = arguments['new_example_indices_dict_path']
     inference_batch_size = int(arguments['inference_batch_size'])
 
     with ClearCache():
-        feedback_data = read_json(feedback_prompts_path)
-        new_example_indices_dict = read_json(new_example_indices_dict_path)
-
         tokenizer = load_tokenizer(model_path)
+
+        stop_list = [" \n\n", "\n\n"]
+        stop_token_ids = [tokenizer(x, return_tensors='pt', add_special_tokens=False)['input_ids'] for x in stop_list]
+        stop_token_ids = [LongTensor(x).to('cuda:0') for x in stop_token_ids]
+        class StopOnTokens(StoppingCriteria):
+            def __call__(self, input_ids: LongTensor, scores: FloatTensor, **kwargs) -> bool:
+                for stop_ids in stop_token_ids:
+                    if (input_ids[0][-len(stop_ids[0])+1:] == stop_ids[0][1:]).all():
+                        return True
+                return False
+
+        stopping_criteria = StoppingCriteriaList([StopOnTokens()])
+        feedback_data = read_json(feedback_prompts_path)
+        
         model = load_model_with_adapters(iteration, adapters_path, model_path)
         model.eval()
         bert_model, bert_tokenizer = load_bert()
 
-        # pipeline = transformers.pipeline(
-        #     "text-generation",
-        #     model=model,
-        #     tokenizer=tokenizer,
-        #     # torch_dtype=torch.float16,
-        #     max_new_tokens=100,
-        #     do_sample=True,
-        #     num_return_sequences=num_return_seq
-
-        # )
-        # pipeline.tokenizer.pad_token_id = pipeline.model.config.eos_token_id
-
         result = []
-        prompt_example_dict = {}
         log_counter=0
         major_voting_log = []
 
-
-        
         for task_name in tqdm.tqdm(list(feedback_data.keys()), desc="Each task fb generation:", position=0):
             if ".json" in task_name:
                 task_dict = feedback_data[task_name]
-                selected_example_index_list = new_example_indices_dict[task_name]
-                index = 0
-                prompt_example_list = []
                 per_task_dataset = task_dict["Feedback Prediction Prompt Dataset"]
+                per_task_full_string_list = []
                 
                 batches = split_into_batches(per_task_dataset, inference_batch_size)
-
+                index = 0
                 for each_batch in batches:
-                    # reason = f"fake feedback"#pipeline(each)
-
-                    #res = pipeline(each_feedback_prompt)
-                    res = inference(model, tokenizer, each_batch,num_return_seq)
+                    res = inference(model, tokenizer, each_batch, num_return_seq,stopping_criteria)
 
                     for group_idx, each_input_response_group in enumerate(res):
 
@@ -191,18 +180,16 @@ def feedback_inference():
                         for each_response in each_input_response_group:
                             truncated_result_list.append(each_response[len(input_text):].split('\n\n')[0].strip())
 
-                    # truncated_result = [res[i]['generated_text'][len(each_feedback_prompt):].split(
-                    #     '\n\n')[0].strip() for i in range(len(res))]
-
-
                         if len(truncated_result_list) == 1:
                             result.append(truncated_result_list[0])
+                            per_task_full_string_list.append(input_text+truncated_result_list[0])
                             voted_feedback= truncated_result_list[0]
                             
                         else: 
                             voted_feedback, outliers, response_vectors_2d, cluster_center, data_center,pure_vector2d = major_vote_response(
                                 bert_model, bert_tokenizer, truncated_result_list, contamination=contamination, batch_size=num_return_seq)
                             result.append(voted_feedback)
+                            per_task_full_string_list.append(input_text+voted_feedback)
                             if log_counter<20:
                                 tmp = {"each_feedback_prompt":each_response,
                                         "truncated_result":truncated_result_list,
@@ -213,23 +200,17 @@ def feedback_inference():
                                         "pure_vector2d":pure_vector2d.tolist()}
                                 major_voting_log.append(tmp)
                                 log_counter+=1
+                        task_dict['Instances'][index]['fb_pred'] = voted_feedback
+                        index+=1
 
-                        if index in selected_example_index_list:
-                            prompt_example_list.append({"input": task_dict['Instances'][index]["input"],
-                                                        "output": task_dict['Instances'][index]["answer_prediction"],
-                                                        "reason": voted_feedback})
-                        
-
-                        index += 1
-
-                prompt_example_dict[task_name] = prompt_example_list
+                feedback_data[task_name]['Full clustering context'] = per_task_full_string_list
                 del batches
+                del per_task_full_string_list
                 del per_task_dataset
 
         feedback_data["Feedback Label"] = result
 
         write_json(feedback_dataset_path, feedback_data)
-        write_json(current_prompt_examples_path, prompt_example_dict)
         write_json(major_voting_save_path, major_voting_log)
 
 feedback_inference()

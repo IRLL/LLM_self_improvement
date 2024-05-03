@@ -44,7 +44,7 @@ def eval_boolq():
             boolq_data = json.loads(obj.read())
 
         #print(len(boolq_data))
-        boolq_data =boolq_data[:1000]
+        boolq_data =boolq_data
 
         prompt = """Write a response that appropriately completes answer the question, follow the examples. Your answer should be "True" or "False".
 

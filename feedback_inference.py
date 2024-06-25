@@ -3,7 +3,7 @@ import transformers
 import torch
 import os
 import tqdm
-import json
+import json,time
 import sys
 from utils import log_method,ClearCache,load_tokenizer,split_into_batches,load_model_with_adapters, read_json, write_json,load_bert
 
@@ -170,8 +170,12 @@ def feedback_inference():
                 batches = split_into_batches(per_task_dataset, inference_batch_size)
                 index = 0
                 for each_batch in batches:
-                    res = inference(model, tokenizer, each_batch, num_return_seq,stopping_criteria)
-
+                    print("start batch generate")
+                    time1 = time.time()
+                    res = inference(model, tokenizer, each_batch, num_return_seq, stopping_criteria)
+                    time2 = time.time()
+                    print("diff",time2-time1)
+                    assert 1==2
                     for group_idx, each_input_response_group in enumerate(res):
 
                         input_text = each_batch[group_idx]
@@ -202,7 +206,8 @@ def feedback_inference():
                                 log_counter+=1
                         task_dict['Instances'][index]['fb_pred'] = voted_feedback
                         index+=1
-
+                
+                print("batch finish")
                 feedback_data[task_name]['Full clustering context'] = per_task_full_string_list
                 del batches
                 del per_task_full_string_list

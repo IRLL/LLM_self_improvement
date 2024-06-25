@@ -5,10 +5,12 @@ results
 __pycache__
 /__pycache__
 clustering_test/split_test.json
-
 wandb/.*
 wandb/*
 reproducelmsi/wandb/*
 *.png
 *.txt
 test_load_model/*
+/reproducelmsi
+reproducelmsi
+/reproducelmsi/*

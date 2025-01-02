@@ -13,7 +13,7 @@ ELITE is a comprehensive framework for fine-tuning large language models (LLMs) 
 - Distributed training support via DeepSpeed
 
 ## Methodology
-![Overview of LaFFi](img/overview.png)
+![Overview of LaFFi](img/overview.jpg)
 Details see [Link](https://era.library.ualberta.ca/items/f74a92ea-cce9-4bee-b7b7-c44865f296d0)
 
 ## Requirements

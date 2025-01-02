@@ -1,39 +1,78 @@
+"""
+Author: Qianxi Li
+Date: June 2, 2024
+Description: This script processes natural instruction datasets for supervised fine-tuning.
+"""
 
 import os
 import json
-import torch
-from torch.utils.data import Dataset, DataLoader
+import logging
 
-base_root = "/home/qianxi/scratch/laffi/datasets/natural_instruction_v1/train"
-limit = 50
-input_list = []
-label_list = []
-for each_file in os.listdir(base_root):
-    if ".json" in each_file:
-        full_path = os.path.join(base_root, each_file)
-        with open(full_path) as obj:
-            content = json.loads(obj.read())
+# Configure logging
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+logger = logging.getLogger(__name__)
 
+def process_instruction_data(base_root, output_path, limit=50):
+    """
+    Process natural instruction data for supervised fine-tuning.
+    
+    Args:
+        base_root (str): Root directory containing instruction data files
+        output_path (str): Path to save processed dataset
+        limit (int): Maximum number of instances per task
+    """
+    # Initialize data collection lists
+    input_list = []
+    label_list = []
+    
+    # Process each JSON file in directory
+    for filename in os.listdir(base_root):
+        if ".json" not in filename:
+            continue
+            
+        filepath = os.path.join(base_root, filename)
+        logger.info(f"Processing {filename}")
+        
+        # Load and parse JSON content
+        with open(filepath) as f:
+            content = json.loads(f.read())
+        
+        # Format instruction text
         instruction = f"""### Instruction:\n{content["Definition"]} {content["Emphasis & Caution"]}\n\n"""
-        question = f"""### Answer:\n"""
-        per_task_limit = limit
-        if len(content["Instances"]) < per_task_limit:
-            per_task_limit = len(content["Instances"])
-
-        for i in range(per_task_limit):
+        question = "### Answer:\n"
+        
+        # Process instances up to limit
+        instances_limit = min(limit, len(content["Instances"]))
+        for i in range(instances_limit):
+            # Format task and full prompt
             task = f"""### Task:\n{content["Instances"][i]["input"]}\n\n"""
-            full_prompt = f"""{instruction}{task}{question}"""
-
-            input_list.append(full_prompt)
+            full_prompt = f"{instruction}{task}{question}"
+            
+            # Process label
             label = content["Instances"][i]["output"]
-
             if isinstance(label, list):
-                label = content["Instances"][i]['output'][0]
-
-            assert isinstance(label, str),"wrong type"
+                label = label[0]
+            
+            # Verify label type
+            assert isinstance(label, str), "Label must be a string type"
+            
+            # Add to collections
+            input_list.append(full_prompt)
             label_list.append(label)
+    
+    # Log processing results
+    logger.info(f"Processed {len(input_list)} total instances")
+    
+    # Save processed dataset
+    output_data = {"input": input_list, "label": label_list}
+    with open(output_path, 'w') as f:
+        json.dump(output_data, f)
+    logger.info(f"Saved processed dataset to {output_path}")
 
-print(len(input_list))
-print(len(label_list))
-with open("/home/qianxi/scratch/laffi/datasets/natural_instruction_v1/natural_ins_train_50.json",'w') as obj:
-    obj.write(json.dumps({"input":input_list,"label":label_list})) 
+if __name__ == "__main__":
+    # Define paths and parameters
+    base_root = "/home/qianxi/scratch/laffi/datasets/natural_instruction_v1/train"
+    output_path = "/home/qianxi/scratch/laffi/datasets/natural_instruction_v1/natural_ins_train_50.json"
+    
+    # Process dataset
+    process_instruction_data(base_root, output_path)

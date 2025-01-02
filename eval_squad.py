@@ -1,31 +1,74 @@
-import transformers
-import torch,tqdm
-import os,json,sys
+"""
+Author: Qianxi Li
+Date: June 20, 2024
+Description: This script evaluates a model on the SQuAD dataset using a transformer-based model with adapters.
+It generates predictions, evaluates their accuracy, and saves the results.
+"""
 
-from utils import log_method, ClearCache,load_tokenizer,load_model_with_adapters,split_into_batches
+import transformers
+import torch
+import tqdm
+import os
+import json
+import sys
+import logging
+from utils import (
+    log_method, ClearCache, load_tokenizer, load_model_with_adapters, split_into_batches
+)
+
+# Configure logging
+logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 
 def inference(model, tokenizer, batch_input_text):
-    input_ids = tokenizer(batch_input_text, return_tensors="pt", max_length=2048,padding=True, truncation=True).to('cuda:0')
+    """
+    Perform inference on a batch of input text.
+
+    Args:
+        model: Transformer model for text generation.
+        tokenizer: Tokenizer associated with the model.
+        batch_input_text: List of input texts for processing.
+
+    Returns:
+        List of generated responses for the input text batch.
+    """
+    # Tokenize input texts
+    input_ids = tokenizer(
+        batch_input_text, 
+        return_tensors="pt",
+        max_length=2048,
+        padding=True,
+        truncation=True
+    ).to('cuda:0')
+
+    # Perform model inference without gradients
     with torch.no_grad():
         outputs = model.generate(
-            input_ids=input_ids['input_ids'], 
-            do_sample=True, 
-            use_cache=True, 
+            input_ids=input_ids['input_ids'],
+            do_sample=True,
+            use_cache=True,
             num_return_sequences=1,
             max_new_tokens=20,
-            attention_mask=input_ids['attention_mask'] ,
+            attention_mask=input_ids['attention_mask'],
             pad_token_id=tokenizer.pad_token_id
         )
-    #generated_texts = [tokenizer.decode(each, skip_special_tokens=True) for each in outputs]
 
-    res = [tokenizer.decode(each, skip_special_tokens=True) for each in outputs]
+    # Decode generated outputs
+    results = [tokenizer.decode(each, skip_special_tokens=True) for each in outputs]
+
+    # Clean up memory
     del input_ids
-    return res
+    return results
 
 @log_method
 def eval_squad():
-    arguments = json.loads(sys.argv[1])
+    """
+    Evaluate the model on the SQuAD dataset.
 
+    Parses the arguments from the command line, loads the dataset, performs inference,
+    evaluates predictions, and saves the results to a file.
+    """
+    # Parse command-line arguments
+    arguments = json.loads(sys.argv[1])
     iteration = int(arguments['cur_iteration'])
     transformed_squad_eval_set_path = arguments['transformed_squad_eval_set_path']
     original_squad_eval_set_path = arguments['original_squad_eval_set_path']
@@ -33,26 +76,18 @@ def eval_squad():
     squad_eval_result_path = arguments['squad_eval_result_path']
     adapters_path = arguments['adapters_path']
     model_path = arguments['model_path']   
-    inference_batch_size=int(arguments['inference_batch_size'])
-     
+    inference_batch_size = int(arguments['inference_batch_size'])
+
+    # Clear GPU memory before starting the evaluation
     with ClearCache():
+        # Load model and tokenizer
         model = load_model_with_adapters(iteration, adapters_path, model_path)
         tokenizer = load_tokenizer(model_path)
         model.eval()
 
-        # pipeline = transformers.pipeline(
-        #     "text-generation",
-        #     model=model,
-        #     tokenizer=tokenizer,
-        #     torch_dtype=torch.float16,
-        #     max_new_tokens=20)
-
-        # pipeline.tokenizer.pad_token_id = pipeline.model.config.eos_token_id
-        with open(transformed_squad_eval_set_path) as obj:
-            file = json.loads(obj.read())
-
-        # all_data = file["data"]#["paragraphs"]["qas"]
-        res_dict = {}
+        # Load evaluation dataset
+        with open(transformed_squad_eval_set_path, 'r') as obj:
+            squad_data = json.load(obj)
 
         prompt = """Write a response that appropriately completes answer the question, follow the examples. You should answer 'no answer found' if you cannot find the answer from the context.
 
@@ -85,33 +120,42 @@ def eval_squad():
 
         Answer:"""
 
-        batches = split_into_batches(file, inference_batch_size)
+        # Prepare for batch inference
+        batches = split_into_batches(squad_data, inference_batch_size)
+        results = {}
 
-        for each_batch in tqdm.tqdm(batches,desc="squad_eval"):
-            full_prompt_list = [prompt.format(question=each_row['question'], context=each_row['context']) for each_row in each_batch]
+        for each_batch in tqdm.tqdm(batches, desc="squad_eval"):
+            # Generate prompts for each question
+            full_prompt_list = [
+                prompt.format(question=item['question'], context=item['context']) 
+                for item in each_batch
+            ]
 
-            res = inference(model, tokenizer, full_prompt_list)
-            for idx, each_output in enumerate(res):
-                            
-                output_text = each_output[len(full_prompt_list[idx]):]
-                truncated_result = output_text.strip()
+            # Perform inference
+            responses = inference(model, tokenizer, full_prompt_list)
 
-                answer = truncated_result
+            for idx, response in enumerate(responses):
+                output_text = response[len(full_prompt_list[idx]):].strip()
+                answer = output_text
 
-                if "no answer" in truncated_result.lower() or len(answer)<=3:
+                # Process answers
+                if "no answer" in answer.lower() or len(answer) <= 3:
                     answer = ""
 
-                res_dict[each_batch[idx]['id']] = answer
+                results[each_batch[idx]['id']] = answer
 
-        with open(squad_response_gen_file,'w') as obj:
-            obj.write(json.dumps(res_dict))
+        # Save generated responses to a file
+        with open(squad_response_gen_file, 'w') as obj:
+            json.dump(results, obj)
 
-        del res_dict, file
-        os.system(f"python scripts/official_squad_eval.py --data_file='{original_squad_eval_set_path}' --pred_file='{squad_response_gen_file}' --out-file={squad_eval_result_path}")
+        # Evaluate predictions using an external script
+        os.system(f"python scripts/official_squad_eval.py --data_file={original_squad_eval_set_path} --pred_file={squad_response_gen_file} --out-file={squad_eval_result_path}")
 
-        with open(squad_eval_result_path) as obj:
-            squad_result = json.loads(obj.read())
+        # Log final evaluation results
+        with open(squad_eval_result_path, 'r') as obj:
+            squad_result = json.load(obj)
+        logging.info("SQuAD results for iteration %d: %s", iteration, squad_result)
 
-        print(f"squad result for iter {iteration}",squad_result)
-
-eval_squad()
+# Execute the evaluation
+if __name__ == "__main__":
+    eval_squad()

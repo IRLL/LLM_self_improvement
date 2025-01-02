@@ -1,52 +1,102 @@
+"""
+Author: Qianxi Li
+Date: June 20, 2024
+Description: This script evaluates a model on the BoolQ dataset using a transformer-based model with adapters. It includes a custom inference method for generating predictions.
+
+"""
+
 import transformers
 import torch
-import os,tqdm,json,sys
+import os
+import tqdm
+import json
+import sys
+import logging
 
-from utils import calculate_classification_metrics,log_method,ClearCache,load_model_with_adapters,load_tokenizer,split_into_batches
+from utils import (
+    calculate_classification_metrics,
+    log_method,
+    ClearCache,
+    load_model_with_adapters,
+    load_tokenizer,
+    split_into_batches
+)
+
+# Configure logging
+logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 
 def inference(model, tokenizer, batch_input_text):
-    input_ids = tokenizer(batch_input_text, return_tensors="pt",max_length=2048, padding=True, truncation=True).to('cuda:0')
+    """
+    Perform inference on a batch of input text.
+
+    Args:
+        model: The transformer model for text generation.
+        tokenizer: Tokenizer associated with the model.
+        batch_input_text: List of input texts to process.
+
+    Returns:
+        List of generated responses for the input text batch.
+    """
+    # Tokenize the input text with padding and truncation
+    input_ids = tokenizer(
+        batch_input_text, 
+        return_tensors="pt", 
+        max_length=2048, 
+        padding=True, 
+        truncation=True
+    ).to('cuda:0')
+
     with torch.no_grad():
+        # Generate output using the model
         outputs = model.generate(
             input_ids=input_ids['input_ids'], 
             do_sample=True, 
             use_cache=True, 
             num_return_sequences=1,
             max_new_tokens=10,
-            attention_mask=input_ids['attention_mask'] ,
+            attention_mask=input_ids['attention_mask'],
             pad_token_id=tokenizer.pad_token_id
         )
-    #generated_texts = [tokenizer.decode(each, skip_special_tokens=True) for each in outputs]
 
-    res = [tokenizer.decode(each, skip_special_tokens=True) for each in outputs]
+    # Decode the generated outputs
+    results = [tokenizer.decode(each, skip_special_tokens=True) for each in outputs]
+
+    # Free memory by deleting input IDs
     del input_ids
-    return res
+    return results
 
 @log_method
 def eval_boolq():
-    arguments = json.loads(sys.argv[1])
+    """
+    Evaluate the model on the BoolQ dataset by generating predictions
+    and calculating classification metrics.
 
+    This function processes the dataset in batches, performs inference,
+    and saves evaluation metrics to a specified file.
+    """
+    # Parse arguments passed via the command line
+    arguments = json.loads(sys.argv[1])
     iteration = int(arguments['cur_iteration'])
     boolq_eval_result_path = arguments['boolq_eval_result_path']
     boolq_eval_path = arguments['boolq_eval_path']
     adapters_path = arguments['adapters_path']
     model_path = arguments['model_path']
-    inference_batch_size=int(arguments['inference_batch_size'])
+    inference_batch_size = int(arguments['inference_batch_size'])
 
-
+    # Clear GPU memory before loading model and tokenizer
     with ClearCache():
-
+        # Load the model and tokenizer
         model = load_model_with_adapters(iteration, adapters_path, model_path)
         tokenizer = load_tokenizer(model_path)
         model.eval()
 
+        # Load the evaluation dataset
         with open(boolq_eval_path) as obj:
             boolq_data = json.loads(obj.read())
 
-        #print(len(boolq_data))
-        boolq_data =boolq_data
-
-        prompt = """Write a response that appropriately completes answer the question, follow the examples. Your answer should be "True" or "False".
+        # Define the prompt template
+        prompt = """
+        Write a response that appropriately answers the question. Your answer should be "True" or "False".
 
         ### Example 1:
         Passage: 
@@ -78,48 +128,43 @@ def eval_boolq():
         Answer:
         """
 
-
-        """
-        batches = split_into_batches(texts, inference_batch_size)
-                for each_batch in tqdm.tqdm(batches):
-
-
-                    res = inference(model, tokenizer, each_batch)
-
-                    for idx, each_output in enumerate(res):
-                            
-                        output_text = each_output[len(each_batch[idx]):]
-                        truncated_result = output_text.strip()
-
-                        result.append(truncated_result)
-
-        """
+        # Prepare for batch inference
         batches = split_into_batches(boolq_data, inference_batch_size)
         predictions = []
         labels = []
-        for each_batch in tqdm.tqdm(batches):
 
-            full_prompt_list = [prompt.format(question=item['question'], passage=item['passage']) for item in each_batch]
+        for each_batch in tqdm.tqdm(batches):
+            # Generate the full prompt for each data item
+            full_prompt_list = [
+                prompt.format(question=item['question'], passage=item['passage']) 
+                for item in each_batch
+            ]
+
+            # Perform inference on the batch
             res = inference(model, tokenizer, full_prompt_list)
             for idx, each_output in enumerate(res):
-                            
+                # Process the model output to extract predictions
                 output_text = each_output[len(full_prompt_list[idx]):]
                 truncated_result = output_text.strip()
 
-                if "false" in truncated_result or "False" in truncated_result:
+                # Map results to binary classification
+                if "false" in truncated_result.lower():
                     predictions.append(0)
                 else:
                     predictions.append(1)
                 labels.append(each_batch[idx]["answer"])
 
-
+        # Calculate evaluation metrics
         metrics = calculate_classification_metrics(predictions, labels)
-        print("boolq metrics",metrics)
-        with open(boolq_eval_result_path,'w') as obj:
+        logging.info("BoolQ metrics: %s", metrics)
+
+        # Save the metrics to a file
+        with open(boolq_eval_result_path, 'w') as obj:
             obj.write(json.dumps(metrics))
-        
-        del labels,predictions,boolq_data
 
+        # Free memory by deleting unused variables
+        del labels, predictions, boolq_data
 
-
-eval_boolq()
+# Execute the evaluation function
+if __name__ == "__main__":
+    eval_boolq()
